@@ -1,0 +1,69 @@
+.
+├── backend/
+│   ├── config/
+│   │   └── db.js                 # Database connection logic
+│   ├── controllers/
+│   │   ├── authController.js     # Shared Auth logic (Patient & Doctor)
+│   │   ├── bookingController.js  # [MEMBER 1] Booking, hold, & transaction logic
+│   │   ├── doctorController.js   # [MEMBER 2] Specialization, qualifications, & profile
+│   │   ├── scheduleController.js # [MEMBER 2] Availability rule parsing & slot generation
+│   │   └── videoController.js    # [MEMBER 3] Video room token generation/validation (if needed)
+│   ├── middleware/
+│   │   └── authMiddleware.js     # JWT verification & Role checking (isDoctor, isPatient)
+│   ├── models/                   # [MEMBER 2 - Base schemas]
+│   │   ├── Appointment.js        # Appointment references
+│   │   ├── DoctorProfile.js      # Doctor metadata
+│   │   ├── Slot.js               # Individual bookable slots (status: open, held, booked)
+│   │   └── User.js               # Common User schema (patient/doctor/admin roles)
+│   ├── routes/
+│   │   ├── authRoutes.js         # Routes for registration and login
+│   │   ├── bookingRoutes.js      # [MEMBER 1] Search, filter, and booking endpoints
+│   │   ├── scheduleRoutes.js     # [MEMBER 2] Schedule setup and slot building endpoints
+│   │   └── videoRoutes.js        # [MEMBER 3] Room authorization and signaling endpoints
+│   ├── services/
+│   │   └── socketService.js      # [MEMBER 3] Clean Socket.io connection & signaling handlers
+│   ├── utils/
+│   │   ├── concurrencyHelper.js  # [MEMBER 1] Transaction wrappers
+│   │   └── seedDoctors.js        # [MEMBER 1 & 2] Mock doctor data script for fast testing
+│   ├── .env.example              # Template for environment variables
+│   ├── package.json              # Backend dependencies
+│   └── server.js                 # Entry point (Express, Socket.io, & server initialization)
+│
+├── frontend/
+│   ├── public/
+│   │   ├── favicon.svg
+│   │   └── icons.svg
+│   ├── src/
+│   │   ├── assets/
+│   │   │   ├── hero.png
+│   │   │   └── react.svg
+│   │   ├── components/           # Shared reusable UI elements
+│   │   │   ├── Navbar.jsx        # Navigation
+│   │   │   ├── ProtectedRoute.jsx# Auth guard wrapper
+│   │   │   └── VideoTester.jsx   # [MEMBER 3] Hardware selection & permissions test UI
+│   │   ├── context/
+│   │   │   └── AuthContext.jsx   # Global login/logout state & JWT storage
+│   │   ├── hooks/
+│   │   │   └── useWebRTC.js      # [MEMBER 3] Custom hook for local/remote video streams
+│   │   ├── pages/
+│   │   │   ├── Login.jsx         # Shared login page
+│   │   │   ├── Register.jsx      # Shared registration page
+│   │   │   ├── patient/          # [MEMBER 1 Pages]
+│   │   │   │   ├── DoctorSearch.jsx   # Main search and specialization/city filtering
+│   │   │   │   ├── BookingCheckout.jsx# Booking confirmation & payment screen
+│   │   │   │   └── PatientDashboard.jsx# List of upcoming appointments & join-call buttons
+│   │   │   ├── doctor/           # [MEMBER 2 Pages]
+│   │   │   │   ├── DoctorDashboard.jsx# List of booked slots & patient records
+│   │   │   │   └── ScheduleBuilder.jsx# UI to define weekly rules (e.g., Mon 9-17)
+│   │   │   └── video/            # [MEMBER 3 Pages]
+│   │   │   │   └── VideoRoom.jsx # Peer-to-peer live stream consultation room
+│   │   ├── App.css
+│   │   ├── App.jsx               # Routes definition (react-router-dom)
+│   │   ├── index.css
+│   │   └── main.jsx
+│   ├── index.html
+│   ├── vite.config.js
+│   └── package.json
+│
+├── .gitignore                    # Root level Git exclusions
+└── plan.txt                      # Project roadmap

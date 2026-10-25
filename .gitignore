@@ -4,6 +4,8 @@
 node_modules/
 jspm_packages/
 web_modules/
+backend/node_modules/
+frontend/node_modules/
 
 # ==========================================
 # 🔒 Environment Variables & Secrets (CRITICAL)
@@ -15,6 +17,9 @@ web_modules/
 .env.production.local
 *.env.local
 .env.*
+.env
+backend/.env
+frontend/.env
 
 # ==========================================
 # 🛠️ Build & Compilation Outputs
@@ -22,6 +27,7 @@ web_modules/
 # Vite build output
 dist/
 dist-ssr/
+frontend/dist/
 
 # Node/TypeScript build outputs
 build/
@@ -52,6 +58,7 @@ htmlcov/
 # ==========================================
 # Editor settings
 .vscode/
+.DS_Store
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
