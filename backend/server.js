@@ -1,25 +1,28 @@
-const express = require('express');
+// backend/server.js
 const http = require('http');
 const { Server } = require('socket.io');
-const cors = require('cors');
 require('dotenv').config();
 
-const app = express();
-app.use(cors());
-app.use(express.json());
+// Import the configured Express app
+const app = require('./app');
 
+// Create the HTTP server wrapper (essential for Socket.io to sit on top of Express)
 const server = http.createServer(app);
+
+// Initialize the Socket.io signaling server engine (for Member 3)
 const io = new Server(server, {
-  cors: { origin: "*" }
+  cors: {
+    origin: "*", // Allows developer clients to connect during local dev
+    methods: ["GET", "POST"]
+  }
 });
 
-// Socket.io signalling placeholder (For Member 3)
-io.on('connection', (socket) => {
-  console.log('User connected:', socket.id);
-  // Member 3 will write signaling events here
-});
+// Pass the 'io' instance to your dedicated signaling logic folder
+const initSocketService = require('./services/socketService');
+initSocketService(io);
 
 const PORT = process.env.PORT || 5000;
+
 server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`🚀 Telemedicine server is active on http://localhost:${PORT}`);
 });
