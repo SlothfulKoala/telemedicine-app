@@ -41,7 +41,8 @@ export const useWebRTC = (roomId) => {
   useEffect(() => {
     // 1. Connect to Socket.io backend
     socketRef.current = io(BACKEND_URL, {
-      transports: ['websocket', 'polling'], // Fallback to polling if WebSockets face firewall delays
+      transports: ['websocket'],
+      upgrade: false
     });
     const socket = socketRef.current;
 
