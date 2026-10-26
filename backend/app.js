@@ -7,7 +7,7 @@ const apiRouter = require('./routes/entry'); // Centralized entry router
 const app = express();
 
 // Connect to Cloud MongoDB Atlas
-connectDB();
+// connectDB();
 
 // Global Middlewares
 app.use(cors());
