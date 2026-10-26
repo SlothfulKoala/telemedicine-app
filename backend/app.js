@@ -10,7 +10,7 @@ const app = express();
 // connectDB();
 
 // Global Middlewares
-app.use(cors());
+app.use(cors({ origin: "*" }));
 app.use(express.json());
 
 // Mount central API gateway router

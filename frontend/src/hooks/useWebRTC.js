@@ -1,14 +1,33 @@
-// frontend/src/hooks/useWebRTC.js
 import { useEffect, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
 
-// Public Google STUN servers (free, reliable for college evaluations)
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+
 const ICE_SERVERS = {
   iceServers: [
+    // Standard Google STUN servers
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
+
+    // Free OpenRelay TURN servers (handles NAT/firewall traversal across networks)
+    {
+      urls: 'turn:openrelay.metered.ca:80',
+      username: 'openrelay',
+      credential: 'openrelay',
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443',
+      username: 'openrelay',
+      credential: 'openrelay',
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+      username: 'openrelay',
+      credential: 'openrelay',
+    },
   ],
 };
+
 
 export const useWebRTC = (roomId) => {
   const [localStream, setLocalStream] = useState(null);
@@ -21,7 +40,9 @@ export const useWebRTC = (roomId) => {
 
   useEffect(() => {
     // 1. Connect to Socket.io backend
-    socketRef.current = io('http://localhost:5000');
+    socketRef.current = io(BACKEND_URL, {
+      transports: ['websocket', 'polling'], // Fallback to polling if WebSockets face firewall delays
+    });
     const socket = socketRef.current;
 
     const initCall = async () => {
