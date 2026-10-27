@@ -1,4 +1,4 @@
-// backend/routes/index.js
+// backend/routes/entry.js
 const express = require('express');
 const router = express.Router();
 
