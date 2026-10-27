@@ -1,6 +1,6 @@
 /**
- * Telemedicine & Doctor Appointment Platform: MongoDB / Mongoose models (v2)
- * v2 adds: Hospital, hospital-scoped admins, in-person consults, Consent, SystemSetting
+ * Telemedicine & Doctor Appointment Platform: MongoDB / Mongoose models (v3)
+ * Single platform (no hospital/organisation layer). Supports video + in-person consults.
  * Stack: Node.js + Mongoose 8 + mongoose-field-encryption
  *
  * MongoDB has no real foreign keys. Every "FK" below is an ObjectId with
@@ -28,8 +28,6 @@ const userSchema = new Schema({
   phone:        { type: String, required: true },
   passwordHash: { type: String, required: true, select: false },
   role:         { type: String, enum: ['patient', 'doctor', 'admin'], required: true, index: true },
-  adminType:    { type: String, enum: ['platform', 'hospital'] },            // only when role = admin
-  hospitalId:   { type: ObjectId, ref: 'Hospital', index: true },            // FK -> Hospital (hospital admins only)
   isEmailVerified: { type: Boolean, default: false },
   isPhoneVerified: { type: Boolean, default: false },
   isActive:     { type: Boolean, default: true },
@@ -39,12 +37,6 @@ const userSchema = new Schema({
 }, { timestamps: true });
 userSchema.index({ email: 1 }, { unique: true });
 userSchema.index({ phone: 1 }, { unique: true });
-userSchema.pre('validate', function () {
-  if (this.role === 'admin') {
-    if (!this.adminType) throw new Error('adminType required for admins');
-    if (this.adminType === 'hospital' && !this.hospitalId) throw new Error('hospitalId required for hospital admins');
-  }
-});
 
 /* ------------------------------------------------------------------ */
 /* 2. REFRESH TOKEN: session store (TTL auto-cleans)                   */
@@ -72,31 +64,10 @@ const specialisationSchema = new Schema({
 }, { timestamps: true });
 
 /* ------------------------------------------------------------------ */
-/* 3b. HOSPITAL (new): groups doctors; hospital admins are scoped to it */
-/*     Doctors point TO the hospital (DoctorProfile.hospitalId), so we  */
-/*     never keep an unbounded doctors[] array here.                    */
-/* ------------------------------------------------------------------ */
-const hospitalSchema = new Schema({
-  name:               { type: String, required: true, trim: true },
-  registrationNumber: { type: String, required: true, unique: true },
-  address:  { line1: String, city: { type: String, index: true }, state: String, pincode: String },
-  contact:  { email: String, phone: String },
-  timezone: { type: String, default: 'Asia/Kolkata' },
-  adminUserIds: [{ type: ObjectId, ref: 'User' }],                        // FK[] -> User (role=admin, adminType=hospital)
-  branding: { logoUrl: String, primaryColor: String },
-  verificationStatus: { type: String, enum: ['pending', 'verified', 'rejected', 'suspended'], default: 'pending', index: true },
-  verifiedBy: { type: ObjectId, ref: 'User' },                            // FK -> User (platform admin)
-  verifiedAt: Date,
-  isActive:   { type: Boolean, default: true },
-  doctorCount: { type: Number, default: 0 },                              // denormalised counter
-}, { timestamps: true });
-
-/* ------------------------------------------------------------------ */
 /* 4. DOCTOR PROFILE (1:1 with User where role = doctor)               */
 /* ------------------------------------------------------------------ */
 const doctorProfileSchema = new Schema({
   userId:          { type: ObjectId, ref: 'User', required: true, unique: true },      // FK -> User (1:1)
-  hospitalId:      { type: ObjectId, ref: 'Hospital', index: true },                   // FK -> Hospital (null = independent doctor)
   consultationModes: { type: [String], enum: ['video', 'in_person'], default: ['video'] },
   cancellationPolicy: {                                                                // drives refund on cancel/reschedule
     freeCancelHours:  { type: Number, default: 24 },
@@ -133,7 +104,6 @@ const doctorProfileSchema = new Schema({
 doctorProfileSchema.index({ specialisations: 1, city: 1, fee: 1 });
 doctorProfileSchema.index({ verificationStatus: 1, isAcceptingBookings: 1, 'rating.avg': -1 });
 doctorProfileSchema.index({ bio: 'text' });
-doctorProfileSchema.index({ hospitalId: 1, verificationStatus: 1 });      // hospital admin: manage my doctors
 doctorProfileSchema.index({ languages: 1 });
 
 /* ------------------------------------------------------------------ */
@@ -210,7 +180,6 @@ const paymentSchema = new Schema({
   appointmentId: { type: ObjectId, ref: 'Appointment', index: true },     // FK -> Appointment
   patientId:     { type: ObjectId, ref: 'User', required: true, index: true },   // FK -> User
   doctorId:      { type: ObjectId, ref: 'DoctorProfile', required: true },       // FK -> DoctorProfile
-  hospitalId:    { type: ObjectId, ref: 'Hospital', index: true },               // FK -> Hospital (hospital-level earnings)
   provider:      { type: String, enum: ['razorpay', 'stripe'], required: true },
   providerOrderId:   { type: String, required: true },
   providerPaymentId: String,
@@ -233,7 +202,6 @@ const appointmentSchema = new Schema({
   slotId:    { type: ObjectId, ref: 'Slot', required: true },             // FK -> Slot
   doctorId:  { type: ObjectId, ref: 'DoctorProfile', required: true },    // FK -> DoctorProfile
   patientId: { type: ObjectId, ref: 'User', required: true },             // FK -> User (patient)
-  hospitalId: { type: ObjectId, ref: 'Hospital', index: true },           // FK -> Hospital (copied from doctor at booking)
   status: {
     type: String,
     enum: ['held', 'confirmed', 'in_progress', 'completed', 'cancelled', 'no_show', 'rescheduled', 'expired'],
@@ -268,7 +236,6 @@ appointmentSchema.index(
 appointmentSchema.index({ patientId: 1, startAt: -1 });
 appointmentSchema.index({ doctorId: 1, startAt: -1 });
 appointmentSchema.index({ status: 1, startAt: 1 });                       // reminder cron
-appointmentSchema.index({ hospitalId: 1, startAt: -1 });                  // hospital admin: aggregate reporting
 // roomId unique only when it exists as a string (in-person appointments have none)
 appointmentSchema.index({ roomId: 1 }, { unique: true, partialFilterExpression: { roomId: { $type: 'string' } } });
 // Mode rules: video needs a roomId at confirmation; in-person must never have one
@@ -426,9 +393,7 @@ const auditLogSchema = new Schema({
   entityType: { type: String, required: true },                           // 'HealthRecord', 'Prescription', ...
   entityId:   { type: ObjectId },                                         // polymorphic reference (no single ref)
   patientId:  { type: ObjectId, ref: 'User' },                            // FK -> User: whose data was touched
-  hospitalId: { type: ObjectId, ref: 'Hospital', index: true },           // FK -> Hospital (hospital admin review scope)
-  accessBasis: { type: String, enum: ['self', 'treating_relationship', 'patient_consent', 'admin_aggregate', 'break_glass', 'system'] },
-  consentId:  { type: ObjectId, ref: 'Consent' },                         // FK -> Consent (when basis = patient_consent)
+  accessBasis: { type: String, enum: ['self', 'treating_relationship', 'patient_grant', 'admin_review', 'break_glass', 'system'] },  // patient_grant = HealthRecord.sharedWith
   outcome:    { type: String, enum: ['success', 'denied', 'error'], default: 'success' },
   ip:         String,
   userAgent:  String,
@@ -444,34 +409,15 @@ auditLogSchema.index({ entityType: 1, entityId: 1, at: -1 });
 );
 
 /* ------------------------------------------------------------------ */
-/* 19. CONSENT (new): explicit, revocable grants of patient data access */
-/*     Needed for hospital admins / non-treating staff (DISHA/DPDP).    */
-/* ------------------------------------------------------------------ */
-const consentSchema = new Schema({
-  patientId:   { type: ObjectId, ref: 'User', required: true, index: true },  // FK -> User (grantor)
-  granteeType: { type: String, enum: ['hospital', 'doctor'], required: true },
-  hospitalId:  { type: ObjectId, ref: 'Hospital' },                           // FK -> Hospital (if granteeType = hospital)
-  doctorId:    { type: ObjectId, ref: 'DoctorProfile' },                      // FK -> DoctorProfile (if granteeType = doctor)
-  scope:       [{ type: String, enum: ['records', 'prescriptions', 'appointments'] }],
-  purpose:     { type: String, required: true },
-  grantedAt:   { type: Date, default: Date.now },
-  expiresAt:   { type: Date, required: true },
-  revokedAt:   Date,
-}, { timestamps: true });
-consentSchema.index({ patientId: 1, granteeType: 1, hospitalId: 1, doctorId: 1 });
-consentSchema.index({ hospitalId: 1, expiresAt: 1 });
-
-/* ------------------------------------------------------------------ */
-/* 20. SYSTEM SETTING (new): admin-managed configuration               */
+/* 19. SYSTEM SETTING: admin-managed platform configuration           */
 /*     NEVER store secrets here: keep API keys in a secrets manager    */
 /*     and store only `secretRef` (the secret's name).                 */
 /* ------------------------------------------------------------------ */
 const systemSettingSchema = new Schema({
-  scope:      { type: String, enum: ['global', 'hospital'], default: 'global' },
-  hospitalId: { type: ObjectId, ref: 'Hospital' },                            // FK -> Hospital (scope = hospital)
   key: {
     type: String, required: true,
-    enum: ['payment_gateway', 'notification_provider', 'retention_policy', 'backup_policy', 'cancellation_policy', 'branding'],
+    unique: true,
+    enum: ['payment_gateway', 'notification_provider', 'retention_policy', 'backup_policy', 'cancellation_policy'],
   },
   value:     { type: Schema.Types.Mixed, required: true },    // e.g. {provider:'razorpay'}; retention {recordsYears:7, auditYears:7, chatDays:365}
   secretRef: String,                                          // e.g. 'prod/razorpay-keys'
@@ -479,7 +425,6 @@ const systemSettingSchema = new Schema({
   updatedBy: { type: ObjectId, ref: 'User', required: true },                 // FK -> User (admin)
   version:   { type: Number, default: 1 },
 }, { timestamps: true });
-systemSettingSchema.index({ scope: 1, hospitalId: 1, key: 1 }, { unique: true });
 
 /* ------------------------------------------------------------------ */
 module.exports = {
@@ -501,7 +446,5 @@ module.exports = {
   Review: model('Review', reviewSchema),
   Notification: model('Notification', notificationSchema),
   AuditLog: model('AuditLog', auditLogSchema),
-  Hospital: model('Hospital', hospitalSchema),
-  Consent: model('Consent', consentSchema),
   SystemSetting: model('SystemSetting', systemSettingSchema),
 };

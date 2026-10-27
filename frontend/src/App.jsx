@@ -1,122 +1,128 @@
 import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
+import Login from './pages/Login'
+import Register from './pages/Register'
+import { AuthProvider } from './context/AuthContext'
+import useAuth from './context/useAuth'
 import './App.css'
 
-function App() {
-  const [count, setCount] = useState(0)
+const roleDetails = {
+  patient: {
+    title: 'Your care, all in one place',
+    description: 'Find doctors, manage appointments, and keep track of your care.',
+  },
+  doctor: {
+    title: 'Your clinical workspace',
+    description: 'Manage your availability and provide care to your patients.',
+  },
+  admin: {
+    title: 'Platform administration',
+    description: 'Manage platform operations and account access.',
+  },
+}
+
+function AuthenticatedApp() {
+  const { user, loading, authError, logout } = useAuth()
+  const [page, setPage] = useState('login')
+  const [logoutError, setLogoutError] = useState('')
+
+  if (loading) {
+    return <main className="loading-state">Checking your session…</main>
+  }
+
+  async function handleLogout() {
+    setLogoutError('')
+    try {
+      await logout()
+    } catch (error) {
+      setLogoutError(error.message)
+    }
+  }
+
+  if (user) {
+    const details = roleDetails[user.role]
+
+    return (
+      <div className="app-shell">
+        <header className="topbar">
+          <a className="brand" href="/" aria-label="CareConnect home">
+            <span className="brand-mark" aria-hidden="true">+</span>
+            CareConnect
+          </a>
+          <div className="account-summary">
+            <span className="role-badge">{user.role}</span>
+            <span className="account-name">{user.name}</span>
+            <button className="secondary-button" type="button" onClick={handleLogout}>
+              Sign out
+            </button>
+          </div>
+        </header>
+
+        <main className="dashboard">
+          <section className="welcome-panel">
+            <p className="eyebrow">{user.role.toUpperCase()} DASHBOARD</p>
+            <h1>{details.title}</h1>
+            <p>{details.description}</p>
+            {user.role === 'doctor' && (
+              <p className="status-note">
+                Your account is pending medical verification. Booking access is
+                enabled after approval.
+              </p>
+            )}
+          </section>
+          {logoutError && <p className="form-error" role="alert">{logoutError}</p>}
+        </main>
+      </div>
+    )
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
+    <div className="app-shell">
+      <header className="topbar">
+        <a className="brand" href="/" aria-label="CareConnect home">
+          <span className="brand-mark" aria-hidden="true">+</span>
+          CareConnect
+        </a>
+        <span className="topbar-caption">Healthcare made more connected</span>
+      </header>
+
+      <main className="auth-layout">
+        <aside className="intro-panel">
+          <p className="eyebrow">PERSONALIZED HEALTHCARE</p>
+          <h2>Care that fits your life.</h2>
           <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
+            Connect with trusted medical professionals and make your health a
+            priority, wherever you are.
           </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+          <div className="intro-points">
+            <span><span aria-hidden="true">✓</span> Secure patient accounts</span>
+            <span><span aria-hidden="true">✓</span> Verified medical professionals</span>
+            <span><span aria-hidden="true">✓</span> Convenient online care</span>
+          </div>
+        </aside>
 
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
+        <div className="auth-column">
+          {authError && (
+            <p className="session-warning" role="alert">
+              Could not restore your previous session: {authError}. You can
+              still sign in below.
+            </p>
+          )}
+          {page === 'login'
+            ? <Login onRegister={() => setPage('register')} />
+            : <Register onLogin={() => setPage('login')} />}
         </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+      </main>
+      <footer className="page-footer">
+        Your health information is handled with care.
+      </footer>
+    </div>
   )
 }
 
-export default App
+export default function App() {
+  return (
+    <AuthProvider>
+      <AuthenticatedApp />
+    </AuthProvider>
+  )
+}
