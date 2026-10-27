@@ -1,4 +1,4 @@
-
+// backend/controllers/authController.js
 const bcrypt = require('bcryptjs');
 const {
   AUTH_COOKIE_NAME,

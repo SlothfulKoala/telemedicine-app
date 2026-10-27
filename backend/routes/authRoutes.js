@@ -1,4 +1,4 @@
-
+// backend/routes/authRoutes.js
 const express = require('express');
 const router = express.Router();
 
@@ -26,9 +26,10 @@ router.post(
   '/doctor-profile',
   authenticate,
   requireRole('doctor'),
-  asyncHandler(completeDoctorProfile),
+  asyncHandler(completeDoctorProfile)
 );
 
+// Protected Dashboard Routes
 router.get(
   '/patient/dashboard',
   authenticate,
