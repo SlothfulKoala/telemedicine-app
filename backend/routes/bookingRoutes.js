@@ -1,15 +1,39 @@
 // backend/routes/bookingRoutes.js
 const express = require('express');
 const router = express.Router();
-const bookingController = require('../controllers/bookingController');
 
-// Check slots: GET /api/bookings/slots/651a2b3c...?date=2026-11-02
-router.get('/slots/:doctorId', bookingController.getAvailableSlots);
+// Import all functions from the unified controller you saved earlier
+const { 
+  getAvailableSlots, 
+  holdSlot, 
+  confirmBooking, 
+  getDoctorAppointments 
+} = require('../controllers/bookingController');
+
+const {
+  authenticate,
+  requireRole,
+} = require('../middleware/authMiddleware');
+
+const asyncHandler = (handler) => (req, res, next) =>
+  Promise.resolve(handler(req, res, next)).catch(next);
+
+// --- YOUR ROUTES (Patient Booking Flow) ---
+// Check slots: GET /api/bookings/slots/:doctorId?date=YYYY-MM-DD
+router.get('/slots/:doctorId', asyncHandler(getAvailableSlots));
 
 // Hold slot: POST /api/bookings/hold
-router.post('/hold', bookingController.holdSlot);
+router.post('/hold', asyncHandler(holdSlot));
 
 // Confirm slot: POST /api/bookings/confirm
-router.post('/confirm', bookingController.confirmBooking);
+router.post('/confirm', asyncHandler(confirmBooking));
+
+// --- TEAM'S ROUTES (Doctor Dashboard Flow) ---
+router.get(
+  '/doctor/appointments',
+  authenticate,
+  requireRole('doctor'),
+  asyncHandler(getDoctorAppointments)
+);
 
 module.exports = router;

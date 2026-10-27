@@ -1,6 +1,28 @@
 const express = require('express');
 const router = express.Router();
+const {
+  getWeeklySchedule,
+  saveWeeklySchedule,
+} = require('../controllers/scheduleController');
+const {
+  authenticate,
+  requireRole,
+} = require('../middleware/authMiddleware');
 
-// You will add specific endpoints here later
+const asyncHandler = (handler) => (req, res, next) =>
+  Promise.resolve(handler(req, res, next)).catch(next);
 
-module.exports = router; // <-- This is the exact line preventing the crash
+router.get(
+  '/weekly',
+  authenticate,
+  requireRole('doctor'),
+  asyncHandler(getWeeklySchedule)
+);
+router.put(
+  '/weekly',
+  authenticate,
+  requireRole('doctor'),
+  asyncHandler(saveWeeklySchedule)
+);
+
+module.exports = router;

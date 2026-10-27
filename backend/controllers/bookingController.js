@@ -1,9 +1,12 @@
 // backend/controllers/bookingController.js
 const mongoose = require('mongoose');
-const Appointment = require('../models/Appointment');
+const {
+  Appointment,
+  DoctorProfile,
+} = require('../models/model');
 
-// 1. Get Available Slots
-exports.getAvailableSlots = async (req, res) => {
+// 1. Get Available Slots (Patient Flow)
+const getAvailableSlots = async (req, res) => {
   try {
     const { doctorId } = req.params;
     const { date } = req.query; // e.g., ?date=2026-11-02
@@ -26,9 +29,8 @@ exports.getAvailableSlots = async (req, res) => {
   }
 };
 
-
-// 2. Hold a Slot (Pre-Payment) - UPGRADED WITH TRANSACTIONS
-exports.holdSlot = async (req, res) => {
+// 2. Hold a Slot (Pre-Payment) - UPGRADED WITH TRANSACTIONS (Patient Flow)
+const holdSlot = async (req, res) => {
   // 1. Start the isolated database bubble (session)
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -71,8 +73,8 @@ exports.holdSlot = async (req, res) => {
   }
 };
 
-// 3. Confirm Booking (Post-Payment)
-exports.confirmBooking = async (req, res) => {
+// 3. Confirm Booking (Post-Payment) (Patient Flow)
+const confirmBooking = async (req, res) => {
   try {
     const { appointmentId } = req.body;
 
@@ -91,4 +93,48 @@ exports.confirmBooking = async (req, res) => {
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
+};
+
+// 4. View Doctor Appointments (Doctor Dashboard Flow)
+async function getDoctorAppointments(req, res) {
+  const doctorProfile = await DoctorProfile.findOne({ userId: req.auth.userId })
+    .select('_id timezone')
+    .lean();
+
+  if (!doctorProfile) {
+    return res.status(404).json({
+      message: 'Complete your doctor profile to view appointments.',
+    });
+  }
+
+  const appointments = await Appointment.find({
+    doctorId: doctorProfile._id,
+    status: 'confirmed',
+    startAt: { $gte: new Date() },
+  })
+    .select('patientId startAt endAt mode status')
+    .populate({ path: 'patientId', select: 'name' })
+    .sort({ startAt: 1 })
+    .limit(100)
+    .lean();
+
+  return res.json({
+    timezone: doctorProfile.timezone || 'Asia/Kolkata',
+    appointments: appointments.map((appointment) => ({
+      id: appointment._id.toString(),
+      patientName: appointment.patientId?.name || 'Patient',
+      startAt: appointment.startAt,
+      endAt: appointment.endAt,
+      mode: appointment.mode,
+      status: appointment.status,
+    })),
+  });
+}
+
+// Export all grouped functions
+module.exports = { 
+  getAvailableSlots,
+  holdSlot,
+  confirmBooking,
+  getDoctorAppointments 
 };
