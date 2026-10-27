@@ -6,6 +6,7 @@ const {
   register,
   login,
   getCurrentUser,
+  completeDoctorProfile,
   logout,
 } = require('../controllers/authController');
 
@@ -21,6 +22,12 @@ router.post('/register', asyncHandler(register));
 router.post('/login', asyncHandler(login));
 router.post('/logout', logout);
 router.get('/me', authenticate, asyncHandler(getCurrentUser));
+router.post(
+  '/doctor-profile',
+  authenticate,
+  requireRole('doctor'),
+  asyncHandler(completeDoctorProfile),
+);
 
 router.get(
   '/patient/dashboard',
