@@ -13,24 +13,16 @@ export default function Register({ onLogin }) {
     setSubmitting(true)
 
     const formData = new FormData(event.currentTarget)
-    const details = {
-      name: formData.get('name'),
-      email: formData.get('email'),
-      phone: formData.get('phone'),
-      password: formData.get('password'),
-      role,
-    }
-
-    if (role === 'doctor') {
-      details.regNumber = formData.get('regNumber')
-      details.fee = Number(formData.get('fee'))
-    }
-
     try {
-      await register(details)
+      await register({
+        name: formData.get('name'),
+        email: formData.get('email'),
+        phone: formData.get('phone'),
+        password: formData.get('password'),
+        role,
+      })
     } catch (requestError) {
       setError(requestError.message)
-    } finally {
       setSubmitting(false)
     }
   }
@@ -40,7 +32,7 @@ export default function Register({ onLogin }) {
       <p className="eyebrow">JOIN CARECONNECT</p>
       <h1 id="register-title">Create your account</h1>
       <p className="auth-description">
-        Register as a patient or a medical professional.
+        Register to continue to {role === 'doctor' ? 'professional profile setup' : 'your care'}.
       </p>
 
       <form className="auth-form" onSubmit={handleSubmit}>
@@ -73,23 +65,6 @@ export default function Register({ onLogin }) {
           Phone number
           <input name="phone" type="tel" autoComplete="tel" required />
         </label>
-
-        {role === 'doctor' && (
-          <>
-            <label>
-              Medical registration number
-              <input name="regNumber" required />
-            </label>
-            <label>
-              Consultation fee (in paise)
-              <input name="fee" type="number" min="0" step="1" required />
-            </label>
-            <p className="form-hint">
-              Doctor accounts require verification before accepting bookings.
-            </p>
-          </>
-        )}
-
         <label>
           Password
           <input

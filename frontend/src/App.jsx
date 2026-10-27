@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import Login from './pages/Login'
 import Register from './pages/Register'
+import DoctorProfileSetup from './pages/DoctorProfileSetup'
+import ScheduleBuilder from './pages/doctor/ScheduleBuilder'
+import Appointments from './pages/doctor/Appointments'
 import { AuthProvider } from './context/AuthContext'
 import useAuth from './context/useAuth'
 import './App.css'
@@ -11,8 +14,8 @@ const roleDetails = {
     description: 'Find doctors, manage appointments, and keep track of your care.',
   },
   doctor: {
-    title: 'Your clinical workspace',
-    description: 'Manage your availability and provide care to your patients.',
+    title: 'Your professional profile is ready',
+    description: 'Your details have been submitted for verification. We’ll let you know when you can start accepting bookings.',
   },
   admin: {
     title: 'Platform administration',
@@ -38,8 +41,20 @@ function AuthenticatedApp() {
     }
   }
 
+  if (user?.role === 'doctor' && !user.onboardingComplete) {
+    return <DoctorProfileSetup onLogout={handleLogout} />
+  }
+
   if (user) {
     const details = roleDetails[user.role]
+
+    if (user.role === 'doctor' && page === 'schedule') {
+      return <ScheduleBuilder onBack={() => setPage('dashboard')} />
+    }
+
+    if (user.role === 'doctor' && page === 'appointments') {
+      return <Appointments onBack={() => setPage('dashboard')} />
+    }
 
     return (
       <div className="app-shell">
@@ -60,13 +75,30 @@ function AuthenticatedApp() {
         <main className="dashboard">
           <section className="welcome-panel">
             <p className="eyebrow">{user.role.toUpperCase()} DASHBOARD</p>
-            <h1>{details.title}</h1>
+            <h1>Welcome, {user.name}!</h1>
+            <h2>{details.title}</h2>
             <p>{details.description}</p>
             {user.role === 'doctor' && (
-              <p className="status-note">
-                Your account is pending medical verification. Booking access is
-                enabled after approval.
-              </p>
+              <>
+                <p className="status-note">
+                  Your professional profile is pending medical verification.
+                  Booking access will be enabled after approval.
+                </p>
+                <button
+                  className="primary-button dashboard-action"
+                  type="button"
+                  onClick={() => setPage('schedule')}
+                >
+                  Set weekly schedule
+                </button>
+                <button
+                  className="secondary-button dashboard-action"
+                  type="button"
+                  onClick={() => setPage('appointments')}
+                >
+                  View upcoming appointments
+                </button>
+              </>
             )}
           </section>
           {logoutError && <p className="form-error" role="alert">{logoutError}</p>}

@@ -9,6 +9,7 @@ const {
   User,
   PatientProfile,
   DoctorProfile,
+  Specialisation,
 } = require('../models/model');
 
 function setAuthCookie(res, user) {
@@ -16,7 +17,7 @@ function setAuthCookie(res, user) {
   res.cookie(AUTH_COOKIE_NAME, token, getAuthCookieOptions());
 }
 
-function safeUser(user) {
+function safeUser(user, onboardingComplete = true) {
   return {
     id: user._id.toString(),
     name: user.name,
@@ -25,7 +26,20 @@ function safeUser(user) {
     role: user.role,
     isEmailVerified: user.isEmailVerified,
     isPhoneVerified: user.isPhoneVerified,
+    onboardingComplete,
   };
+}
+
+function normalizeSpecialisationName(value) {
+  const name = value.trim().replace(/\s+/g, ' ');
+  const slug = name
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+
+  return { name, slug };
 }
 
 async function register(req, res) {
@@ -35,9 +49,6 @@ async function register(req, res) {
     phone,
     password,
     role,
-    regNumber,
-    fee,
-    specialisations,
   } = req.body || {};
 
   // Public registration is limited to patients and doctors.
@@ -74,26 +85,6 @@ async function register(req, res) {
     });
   }
 
-  if (role === 'doctor') {
-    if (typeof regNumber !== 'string' || !regNumber.trim() || fee === undefined || fee === null) {
-      return res.status(400).json({
-        message: 'Doctor registration requires regNumber and fee.',
-      });
-    }
-
-    if (!Number.isSafeInteger(fee) || fee < 0) {
-      return res.status(400).json({
-        message: 'Fee must be a non-negative integer in paise.',
-      });
-    }
-
-    if (specialisations !== undefined && !Array.isArray(specialisations)) {
-      return res.status(400).json({
-        message: 'Specialisations must be an array.',
-      });
-    }
-  }
-
   const normalizedEmail = email.trim().toLowerCase();
   const normalizedPhone = phone.trim();
   const passwordHash = await bcrypt.hash(password, 12);
@@ -113,23 +104,12 @@ async function register(req, res) {
       await PatientProfile.create({ userId: createdUser._id });
     }
 
-    if (role === 'doctor') {
-      await DoctorProfile.create({
-        userId: createdUser._id,
-        regNumber: regNumber.trim(),
-        fee,
-        specialisations: specialisations || [],
-        verificationStatus: 'pending',
-        isAcceptingBookings: false,
-      });
-    }
-
     setAuthCookie(res, createdUser);
     return res.status(201).json({
       message: role === 'doctor'
-        ? 'Registration successful. Your doctor account is pending verification.'
+        ? 'Account created. Complete your professional profile to continue.'
         : 'Patient registration successful.',
-      user: safeUser(createdUser),
+      user: safeUser(createdUser, role !== 'doctor'),
     });
   } catch (error) {
     if (error.code === 11000) {
@@ -140,14 +120,140 @@ async function register(req, res) {
           ? 'Email is already registered.'
           : field === 'phone'
             ? 'Phone number is already registered.'
-            : field === 'regNumber'
-              ? 'Medical registration number is already registered.'
-              : 'An account with these details already exists.',
+            : 'An account with these details already exists.',
       });
     }
 
     throw error;
   }
+}
+
+async function completeDoctorProfile(req, res) {
+  const {
+    regNumber,
+    fee,
+    specialisations,
+    qualifications,
+  } = req.body || {};
+
+  if (typeof regNumber !== 'string' || !regNumber.trim()) {
+    return res.status(400).json({
+      message: 'Medical registration number is required.',
+    });
+  }
+
+  if (!Number.isSafeInteger(fee) || fee < 0) {
+    return res.status(400).json({
+      message: 'Consultation fee must be a non-negative integer in paise.',
+    });
+  }
+
+  if (
+    !Array.isArray(specialisations) ||
+    specialisations.length === 0 ||
+    specialisations.some((name) => typeof name !== 'string' || !name.trim())
+  ) {
+    return res.status(400).json({
+      message: 'Enter at least one valid specialisation.',
+    });
+  }
+
+  if (!Array.isArray(qualifications) || qualifications.length === 0) {
+    return res.status(400).json({
+      message: 'Add at least one qualification.',
+    });
+  }
+
+  const invalidQualification = qualifications.some((qualification) =>
+    !qualification ||
+    typeof qualification.degree !== 'string' ||
+    !qualification.degree.trim() ||
+    typeof qualification.institute !== 'string' ||
+    !qualification.institute.trim() ||
+    !Number.isInteger(qualification.year) ||
+    qualification.year < 1900 ||
+    qualification.year > new Date().getFullYear() + 1
+  );
+
+  if (invalidQualification) {
+    return res.status(400).json({
+      message: 'Each qualification needs a degree, institution, and valid year.',
+    });
+  }
+
+  const normalizedSpecialisations = specialisations.map(normalizeSpecialisationName);
+  if (normalizedSpecialisations.some(({ slug }) => !slug)) {
+    return res.status(400).json({
+      message: 'Enter valid specialisation names.',
+    });
+  }
+
+  const uniqueSpecialisations = [
+    ...new Map(normalizedSpecialisations.map((item) => [item.slug, item])).values(),
+  ];
+  const specialisationRecords = [];
+
+  for (const { name, slug } of uniqueSpecialisations) {
+    let specialisation = await Specialisation.findOne({ slug });
+
+    if (!specialisation) {
+      try {
+        specialisation = await Specialisation.create({ name, slug });
+      } catch (error) {
+        if (error.code !== 11000) throw error;
+        specialisation = await Specialisation.findOne({ slug });
+      }
+    }
+
+    if (!specialisation || !specialisation.isActive) {
+      return res.status(400).json({
+        message: `The specialisation "${name}" is not available.`,
+      });
+    }
+
+    specialisationRecords.push(specialisation);
+  }
+
+  try {
+    await DoctorProfile.create({
+      userId: req.auth.userId,
+      regNumber: regNumber.trim(),
+      fee,
+      specialisations: specialisationRecords.map(({ _id }) => _id),
+      qualifications: qualifications.map((qualification) => ({
+        degree: qualification.degree.trim(),
+        institute: qualification.institute.trim(),
+        year: qualification.year,
+      })),
+      verificationStatus: 'pending',
+      isAcceptingBookings: false,
+    });
+  } catch (error) {
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern || {})[0];
+      return res.status(409).json({
+        message: field === 'regNumber'
+          ? 'Medical registration number is already registered.'
+          : 'A doctor profile already exists for this account.',
+      });
+    }
+
+    throw error;
+  }
+
+  return res.json({
+    message: 'Professional profile completed. Your account is pending verification.',
+    user: {
+      id: req.auth.userId,
+      name: req.auth.name,
+      email: req.auth.email,
+      phone: req.auth.phone,
+      role: req.auth.role,
+      isEmailVerified: req.auth.isEmailVerified,
+      isPhoneVerified: req.auth.isPhoneVerified,
+      onboardingComplete: true,
+    },
+  });
 }
 
 async function login(req, res) {
@@ -199,12 +305,15 @@ async function login(req, res) {
   user.lastLoginAt = new Date();
   await user.save();
 
+  const onboardingComplete = user.role !== 'doctor' ||
+    Boolean(await DoctorProfile.exists({ userId: user._id }));
+
   setAuthCookie(res, user);
 
   return res.status(200).json({
     message: 'Login successful.',
     expiresIn: process.env.JWT_EXPIRES_IN || '15m',
-    user: safeUser(user),
+    user: safeUser(user, onboardingComplete),
   });
 }
 
@@ -214,7 +323,10 @@ async function getCurrentUser(req, res) {
     return res.status(401).json({ message: 'Invalid or inactive account.' });
   }
 
-  return res.json({ user: safeUser(user) });
+  const onboardingComplete = user.role !== 'doctor' ||
+    Boolean(await DoctorProfile.exists({ userId: user._id }));
+
+  return res.json({ user: safeUser(user, onboardingComplete) });
 }
 
 function logout(req, res) {
@@ -222,4 +334,10 @@ function logout(req, res) {
   return res.json({ message: 'Logged out successfully.' });
 }
 
-module.exports = { register, login, getCurrentUser, logout };
+module.exports = {
+  register,
+  login,
+  getCurrentUser,
+  completeDoctorProfile,
+  logout,
+};

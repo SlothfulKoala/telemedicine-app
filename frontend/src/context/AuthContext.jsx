@@ -1,25 +1,53 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import AuthContext from './contextStore'
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 
-async function authRequest(path, options = {}) {
-  const response = await fetch(`${API_BASE_URL}/auth${path}`, {
-    ...options,
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  })
-  const data = await response.json()
+async function apiRequest(url, options = {}) {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 15000)
 
-  if (!response.ok) {
-    const error = new Error(data.message || 'The request could not be completed.')
-    error.status = response.status
+  try {
+    const response = await fetch(url, {
+      ...options,
+      credentials: 'include',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    })
+    const data = await response.json()
+
+    if (!response.ok) {
+      const error = new Error(data.message || 'The request could not be completed.')
+      error.status = response.status
+      throw error
+    }
+
+    return data
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new Error(
+        'The request timed out. Check the backend connection and try again.',
+        { cause: error },
+      )
+    }
     throw error
+  } finally {
+    clearTimeout(timeoutId)
   }
+}
 
-  return data
+function authRequest(path, options) {
+  return apiRequest(`${API_BASE_URL}/auth${path}`, options)
+}
+
+function scheduleRequest(path, options) {
+  return apiRequest(`${API_BASE_URL}/schedule${path}`, options)
+}
+
+function bookingRequest(path, options) {
+  return apiRequest(`${API_BASE_URL}/booking${path}`, options)
 }
 
 export function AuthProvider({ children }) {
@@ -66,6 +94,32 @@ export function AuthProvider({ children }) {
     return data
   }
 
+  async function completeDoctorProfile(profile) {
+    const data = await authRequest('/doctor-profile', {
+      method: 'POST',
+      body: JSON.stringify(profile),
+    })
+    setUser(data.user)
+    return data
+  }
+
+  const getWeeklySchedule = useCallback(
+    () => scheduleRequest('/weekly'),
+    [],
+  )
+
+  const getDoctorAppointments = useCallback(
+    () => bookingRequest('/doctor/appointments'),
+    [],
+  )
+
+  async function saveWeeklySchedule(weeklySchedule) {
+    return scheduleRequest('/weekly', {
+      method: 'PUT',
+      body: JSON.stringify({ weeklySchedule }),
+    })
+  }
+
   async function logout() {
     await authRequest('/logout', { method: 'POST' })
     setUser(null)
@@ -73,7 +127,18 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, authError, login, register, logout }}
+      value={{
+        user,
+        loading,
+        authError,
+        login,
+        register,
+        completeDoctorProfile,
+        getWeeklySchedule,
+        saveWeeklySchedule,
+        getDoctorAppointments,
+        logout,
+      }}
     >
       {children}
     </AuthContext.Provider>
