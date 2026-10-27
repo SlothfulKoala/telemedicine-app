@@ -1,7 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+const getBackendURL = () => {
+  // 1. Check if the user specified a custom backend in their browser address bar (e.g. ?backend=https://xxx.trycloudflare.com)
+  const urlParams = new URLSearchParams(window.location.search);
+  const queryBackend = urlParams.get('backend');
+  if (queryBackend) return queryBackend;
+
+  // 2. Check if we saved a backend URL in this browser's LocalStorage previously
+  const savedBackend = localStorage.getItem('TELEMED_BACKEND_URL');
+  if (savedBackend) return savedBackend;
+
+  // 3. Fallback to Vite's environment variable or localhost
+  return import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+};
+
+const BACKEND_URL = getBackendURL();
 
 const ICE_SERVERS = {
   iceServers: [
