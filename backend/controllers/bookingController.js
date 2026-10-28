@@ -82,18 +82,26 @@ const confirmBooking = async (req, res) => {
   try {
     const { appointmentId } = req.body;
 
-    // Find the held appointment and update its status
-    const confirmedAppt = await Appointment.findByIdAndUpdate(
-      appointmentId, 
-      { status: 'confirmed' }, 
-      { new: true } // Returns the updated document
-    );
+    // 1. Fetch the document using standard findById
+    const appointment = await Appointment.findById(appointmentId);
 
-    if (!confirmedAppt) {
+    if (!appointment) {
       return res.status(404).json({ success: false, message: "Appointment not found" });
     }
 
-    res.status(200).json({ success: true, data: confirmedAppt });
+    // 2. Update the status
+    appointment.status = 'confirmed';
+
+    // 3. Fulfill the team's strict schema validation requirement: 
+    // Video appointments MUST have a roomId when confirmed.
+    if (appointment.mode === 'video') {
+      appointment.roomId = `room-${Math.random().toString(36).substring(2, 9)}`;
+    }
+
+    // 4. Use .save() to trigger all Mongoose hooks and encryption middleware
+    await appointment.save();
+
+    res.status(200).json({ success: true, data: appointment });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
