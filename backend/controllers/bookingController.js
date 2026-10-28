@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const {
   Appointment,
   DoctorProfile,
-} = require('../models/model');
+} = require('../models');
 
 // 1. Get Available Slots (Patient Flow)
 const getAvailableSlots = async (req, res) => {
@@ -30,43 +30,47 @@ const getAvailableSlots = async (req, res) => {
 };
 
 // 2. Hold a Slot (Pre-Payment) - UPGRADED WITH TRANSACTIONS (Patient Flow)
+// 2. Hold a Slot (Pre-Payment) - SCHEMA UPDATED
 const holdSlot = async (req, res) => {
-  // 1. Start the isolated database bubble (session)
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
     const { patientId, doctorId, date, timeSlot } = req.body;
 
-    // 2. Check if it exists, passing the session to LOCK the query
-    const existing = await Appointment.findOne({ doctorId, date, timeSlot }).session(session);
+    // 1. Convert your frontend strings ("2026-11-02", "09:00 AM") into real Date objects
+    const startAt = new Date(`${date} ${timeSlot}`);
+    // Assume a 30-minute appointment to calculate the end time
+    const endAt = new Date(startAt.getTime() + 30 * 60000); 
+    
+    // 2. The new schema requires a Slot ID. Since we are testing locally without the team's cron job, we mock it.
+    const mockSlotId = new mongoose.Types.ObjectId();
+
+    // 3. Check if it exists using the new Date field
+    const existing = await Appointment.findOne({ doctorId, startAt }).session(session);
     
     if (existing) {
-      // 3. If someone else took it, destroy the bubble and cancel the transaction
       await session.abortTransaction();
       session.endSession();
       return res.status(400).json({ success: false, message: "Slot is no longer available" });
     }
 
-    // 4. Create the new appointment
+    // 4. Create the appointment using the STRICT new schema fields
     const newAppointment = new Appointment({
       patientId,
       doctorId,
-      date,
-      timeSlot,
+      slotId: mockSlotId, // Now required
+      startAt: startAt,   // Now required
+      endAt: endAt,       // Now required
       status: 'held'
     });
 
-    // 5. Save the appointment INSIDE the bubble
     await newAppointment.save({ session });
-
-    // 6. Everything worked! Finalize the transaction to the database
     await session.commitTransaction();
     session.endSession();
 
     res.status(201).json({ success: true, appointmentId: newAppointment._id });
   } catch (error) {
-    // If the server crashes mid-process, destroy the bubble to prevent database corruption
     await session.abortTransaction();
     session.endSession();
     res.status(500).json({ success: false, message: error.message });

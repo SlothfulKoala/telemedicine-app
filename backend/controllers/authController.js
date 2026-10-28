@@ -10,7 +10,7 @@ const {
   PatientProfile,
   DoctorProfile,
   Specialisation,
-} = require('../models/model');
+} = require('../models');
 
 function setAuthCookie(res, user) {
   const token = createAccessToken(user);

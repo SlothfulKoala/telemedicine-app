@@ -1,6 +1,6 @@
 
 const jwt = require('jsonwebtoken');
-const { User, DoctorProfile } = require('../models/model');
+const { User, DoctorProfile } = require('../models');
 const { AUTH_COOKIE_NAME, getJwtSecret } = require('../config/auth');
 
 function getTokenFromRequest(req) {

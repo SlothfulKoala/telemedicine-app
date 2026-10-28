@@ -1,27 +1,38 @@
 // backend/controllers/doctorController.js
-const DoctorProfile = require('../models/DoctorProfile');
+// 1. Use curly braces to extract exactly what you need from the barrel file
+const { DoctorProfile, Specialisation } = require('../models'); 
 
-// 1. The Search API (GET)
+// The Search API (GET)
 exports.searchDoctors = async (req, res) => {
   try {
-    // Extract query parameters from the URL
     const { specialisation, city } = req.query;
-    
-    // Start with an empty filter (which would return all doctors)
     const filter = {};
 
-    // If the frontend sent a specialisation, add a case-insensitive rule to the filter
-    if (specialisation) {
-      filter.specialisation = { $regex: specialisation, $options: 'i' };
-    }
-    
-    // If the frontend sent a city, add a case-insensitive rule to the filter
+    // 2. City is still a string in the new schema, so regex works perfectly here
     if (city) {
       filter.city = { $regex: city, $options: 'i' };
     }
 
-    // Run the search. The .populate() command pulls the doctor's name from the User collection!
-    const doctors = await DoctorProfile.find(filter).populate('userId', 'name email');
+    // 3. Specialisations are now linked ObjectIds, so we must look up the ID first
+    if (specialisation) {
+      // Find the specialisation document that matches the search text
+      const specDoc = await Specialisation.findOne({ 
+        name: { $regex: specialisation, $options: 'i' } 
+      });
+      
+      if (specDoc) {
+        // If found, filter doctors who have this specialisation ID in their array
+        filter.specialisations = specDoc._id;
+      } else {
+        // If the specialisation doesn't exist at all, return an empty array immediately
+        return res.status(200).json({ success: true, count: 0, data: [] });
+      }
+    }
+
+    // 4. Run the search. Populate the user info AND the specialisation names!
+    const doctors = await DoctorProfile.find(filter)
+      .populate('userId', 'name email')
+      .populate('specialisations', 'name');
 
     res.status(200).json({ success: true, count: doctors.length, data: doctors });
   } catch (error) {
@@ -29,7 +40,7 @@ exports.searchDoctors = async (req, res) => {
   }
 };
 
-// 2. Temporary Create API (POST) - Just so you can add test data today
+// Temporary Create API (POST)
 exports.createProfile = async (req, res) => {
   try {
     const newProfile = new DoctorProfile(req.body);

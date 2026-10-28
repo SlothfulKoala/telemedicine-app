@@ -2,7 +2,7 @@ const {
   AvailabilityRule,
   DoctorProfile,
   Slot,
-} = require('../models/model');
+} = require('../models');
 const { generateSlotsForDoctor } = require('../services/scheduleGenerator');
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];

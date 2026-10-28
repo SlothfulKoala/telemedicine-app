@@ -3,7 +3,7 @@ const {
   DoctorProfile,
   Slot,
   TimeOff,
-} = require('../models/model');
+} = require('../models');
 
 function getZonedParts(date, timeZone) {
   try {
