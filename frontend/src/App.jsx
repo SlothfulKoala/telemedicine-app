@@ -1,160 +1,147 @@
-import { useState } from 'react'
-import Login from './pages/Login'
-import Register from './pages/Register'
-import DoctorProfileSetup from './pages/DoctorProfileSetup'
-import ScheduleBuilder from './pages/doctor/ScheduleBuilder'
-import Appointments from './pages/doctor/Appointments'
-import { AuthProvider } from './context/AuthContext'
-import useAuth from './context/useAuth'
-import './App.css'
+import React, { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, useLocation, Link } from 'react-router-dom';
+import { AnimatePresence, motion, useMotionValue, useSpring } from 'framer-motion';
+import { AuthProvider } from './context/AuthContext';
+import Navbar from './components/Navbar';
+import Landing from './pages/Landing';
+import Footer from './components/Footer';
 
-const roleDetails = {
-  patient: {
-    title: 'Your care, all in one place',
-    description: 'Find doctors, manage appointments, and keep track of your care.',
-  },
-  doctor: {
-    title: 'Your professional profile is ready',
-    description: 'Your details have been submitted for verification. We’ll let you know when you can start accepting bookings.',
-  },
-  admin: {
-    title: 'Platform administration',
-    description: 'Manage platform operations and account access.',
-  },
-}
-
-function AuthenticatedApp() {
-  const { user, loading, authError, logout } = useAuth()
-  const [page, setPage] = useState('login')
-  const [logoutError, setLogoutError] = useState('')
-
-  if (loading) {
-    return <main className="loading-state">Checking your session…</main>
-  }
-
-  async function handleLogout() {
-    setLogoutError('')
-    try {
-      await logout()
-    } catch (error) {
-      setLogoutError(error.message)
-    }
-  }
-
-  if (user?.role === 'doctor' && !user.onboardingComplete) {
-    return <DoctorProfileSetup onLogout={handleLogout} />
-  }
-
-  if (user) {
-    const details = roleDetails[user.role]
-
-    if (user.role === 'doctor' && page === 'schedule') {
-      return <ScheduleBuilder onBack={() => setPage('dashboard')} />
-    }
-
-    if (user.role === 'doctor' && page === 'appointments') {
-      return <Appointments onBack={() => setPage('dashboard')} />
-    }
-
-    return (
-      <div className="app-shell">
-        <header className="topbar">
-          <a className="brand" href="/" aria-label="CareConnect home">
-            <span className="brand-mark" aria-hidden="true">+</span>
-            CareConnect
-          </a>
-          <div className="account-summary">
-            <span className="role-badge">{user.role}</span>
-            <span className="account-name">{user.name}</span>
-            <button className="secondary-button" type="button" onClick={handleLogout}>
-              Sign out
-            </button>
-          </div>
-        </header>
-
-        <main className="dashboard">
-          <section className="welcome-panel">
-            <p className="eyebrow">{user.role.toUpperCase()} DASHBOARD</p>
-            <h1>Welcome, {user.name}!</h1>
-            <h2>{details.title}</h2>
-            <p>{details.description}</p>
-            {user.role === 'doctor' && (
-              <>
-                <p className="status-note">
-                  Your professional profile is pending medical verification.
-                  Booking access will be enabled after approval.
-                </p>
-                <button
-                  className="primary-button dashboard-action"
-                  type="button"
-                  onClick={() => setPage('schedule')}
-                >
-                  Set weekly schedule
-                </button>
-                <button
-                  className="secondary-button dashboard-action"
-                  type="button"
-                  onClick={() => setPage('appointments')}
-                >
-                  View upcoming appointments
-                </button>
-              </>
-            )}
-          </section>
-          {logoutError && <p className="form-error" role="alert">{logoutError}</p>}
-        </main>
-      </div>
-    )
-  }
-
-  return (
-    <div className="app-shell">
-      <header className="topbar">
-        <a className="brand" href="/" aria-label="CareConnect home">
-          <span className="brand-mark" aria-hidden="true">+</span>
-          CareConnect
-        </a>
-        <span className="topbar-caption">Healthcare made more connected</span>
-      </header>
-
-      <main className="auth-layout">
-        <aside className="intro-panel">
-          <p className="eyebrow">PERSONALIZED HEALTHCARE</p>
-          <h2>Care that fits your life.</h2>
-          <p>
-            Connect with trusted medical professionals and make your health a
-            priority, wherever you are.
-          </p>
-          <div className="intro-points">
-            <span><span aria-hidden="true">✓</span> Secure patient accounts</span>
-            <span><span aria-hidden="true">✓</span> Verified medical professionals</span>
-            <span><span aria-hidden="true">✓</span> Convenient online care</span>
-          </div>
-        </aside>
-
-        <div className="auth-column">
-          {authError && (
-            <p className="session-warning" role="alert">
-              Could not restore your previous session: {authError}. You can
-              still sign in below.
-            </p>
-          )}
-          {page === 'login'
-            ? <Login onRegister={() => setPage('register')} />
-            : <Register onLogin={() => setPage('login')} />}
-        </div>
-      </main>
-      <footer className="page-footer">
-        Your health information is handled with care.
-      </footer>
+const AnimatedPreviewPage = ({ title, subtitle, primaryActionText, primaryActionLink }) => (
+  <motion.main
+    initial={{ opacity: 0, y: 14, filter: 'blur(6px)' }}
+    animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+    exit={{ opacity: 0, y: -12, filter: 'blur(6px)' }}
+    transition={{ duration: 0.42, ease: [0.19, 1, 0.22, 1] }}
+    style={{
+      flex: 1,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '48px',
+    }}
+  >
+    <div
+      className="glass-card"
+      style={{
+        maxWidth: '760px',
+        width: '100%',
+        padding: '48px',
+      }}
+    >
+      <h1 className="hero-display-title" style={{ fontSize: '3.2rem', marginBottom: '16px' }}>
+        {title}
+      </h1>
+      <p style={{ color: 'var(--cream-soft)', fontSize: '17px', lineHeight: 1.6, marginBottom: '32px' }}>
+        {subtitle}
+      </p>
+      <Link to={primaryActionLink || '/'} className="btn-cream-pill">
+        <span>{primaryActionText || 'Return to Home'}</span>
+        <span className="arrow-cycle-box">
+          <span className="arrow-icon-primary">↗</span>
+          <span className="arrow-icon-clone">↗</span>
+        </span>
+      </Link>
     </div>
-  )
-}
+  </motion.main>
+);
 
-export default function App() {
+const AnimatedRoutes = () => {
+  const location = useLocation();
+  return (
+    <AnimatePresence mode="wait">
+      <Routes location={location} key={location.pathname}>
+        <Route path="/" element={<Landing />} />
+        <Route
+          path="/search"
+          element={
+            <AnimatedPreviewPage
+              title="Find Verified Specialists."
+              subtitle="Filter cardiologists, dermatologists, and general physicians by city and live 15-minute slot availability."
+              primaryActionText="Back to Overview"
+              primaryActionLink="/"
+            />
+          }
+        />
+        <Route
+          path="/video"
+          element={
+            <AnimatedPreviewPage
+              title="Instant Video Consultations."
+              subtitle="End-to-end encrypted peer-to-peer WebRTC rooms with live digital prescription generation."
+              primaryActionText="Explore Specialists"
+              primaryActionLink="/search"
+            />
+          }
+        />
+        <Route
+          path="/vault"
+          element={
+            <AnimatedPreviewPage
+              title="Encrypted Health Vault."
+              subtitle="Field-level AES-256 encrypted storage for your lab reports, prescriptions, and clinical history."
+              primaryActionText="Sign In to Access Vault"
+              primaryActionLink="/login"
+            />
+          }
+        />
+        <Route
+          path="/login"
+          element={
+            <AnimatedPreviewPage
+              title="Seamless access to modern care."
+              subtitle="Role-based authentication portal for Patients, Doctors, and System Administrators."
+              primaryActionText="Return Home"
+              primaryActionLink="/"
+            />
+          }
+        />
+      </Routes>
+    </AnimatePresence>
+  );
+};
+
+function App() {
+  // Subtle Mouse Parallax for the Fluted Glass Wall
+  const rawX = useMotionValue(0);
+  const rawY = useMotionValue(0);
+  const bgX = useSpring(rawX, { stiffness: 60, damping: 25, mass: 1 });
+  const bgY = useSpring(rawY, { stiffness: 60, damping: 25, mass: 1 });
+
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      const normX = (e.clientX / window.innerWidth - 0.5) * -18;
+      const normY = (e.clientY / window.innerHeight - 0.5) * -12;
+      rawX.set(normX);
+      rawY.set(normY);
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, [rawX, rawY]);
+
   return (
     <AuthProvider>
-      <AuthenticatedApp />
+      <Router>
+        <div className="fluted-app-shell">
+          {/* Interactive Parallax + Continuous Drift Fluted Glass Wall */}
+          <motion.div
+            style={{ x: bgX, y: bgY }}
+            className="fluted-light-beams"
+          />
+          <div className="fluted-light-caustics" />
+          <div className="fluted-glass-ribbing" />
+
+          {/* Dual-Layer Liquid Navbar */}
+          <Navbar />
+
+          {/* Blur-Dissolve Animated Routes */}
+          <AnimatedRoutes />
+
+          {/* Matte Frosted Glass Footer */}
+          <Footer />
+        </div>
+      </Router>
     </AuthProvider>
-  )
+  );
 }
+
+export default App;
