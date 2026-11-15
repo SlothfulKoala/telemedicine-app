@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Power } from 'lucide-react';
+import { Bell, LogOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 
@@ -16,10 +16,9 @@ const Navbar = () => {
 
   const navConfig = {
     guest: [
-      { label: 'Find Doctors', path: '/' },
-      { label: 'Specialties', path: '/search' },
-      { label: 'Video Consult', path: '/video' },
-      { label: 'Health Vault', path: '/vault' },
+      { label: 'Overview', path: '/' },
+      { label: 'Specialties', path: '/specialties' },
+      { label: 'Security & Privacy', path: '/security' },
     ],
     patient: [
       { label: 'Dashboard', path: '/patient/dashboard' },
@@ -43,13 +42,9 @@ const Navbar = () => {
 
   const links = navConfig[role] || navConfig.guest;
 
-  const handleAuthClick = async () => {
-    if (user) {
-      await logout();
-      navigate('/login');
-    } else {
-      navigate('/login');
-    }
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login?mode=login');
   };
 
   return (
@@ -63,10 +58,10 @@ const Navbar = () => {
         display: 'grid',
         gridTemplateColumns: '1fr auto 1fr',
         alignItems: 'center',
-        zIndex: 30,
+        zIndex: 40,
       }}
     >
-      {/* Left: Animated ECG Pulse Wave Logo + Vitalise */}
+      {/* Left: Brand Pulse Logo */}
       <Link
         to="/"
         onMouseEnter={() => setPulseKey((prev) => prev + 1)}
@@ -83,7 +78,6 @@ const Navbar = () => {
         }}
       >
         <svg width="28" height="22" viewBox="0 0 28 22" fill="none">
-          {/* Base faint path */}
           <path
             d="M1 11H7L10 3L14.5 19L18 8L20.5 11H27"
             stroke="rgba(243, 239, 230, 0.3)"
@@ -91,7 +85,6 @@ const Navbar = () => {
             strokeLinecap="round"
             strokeLinejoin="round"
           />
-          {/* Animated live ECG trace */}
           <motion.path
             key={pulseKey}
             d="M1 11H7L10 3L14.5 19L18 8L20.5 11H27"
@@ -107,7 +100,7 @@ const Navbar = () => {
         <span>Vitalise</span>
       </Link>
 
-      {/* Center: Dual-Layer Liquid Frosted Pill Navigation */}
+      {/* Center: Frosted Pill Navigation */}
       <nav
         className="glass-nav-pill"
         onMouseLeave={() => setHoveredTab(null)}
@@ -123,7 +116,6 @@ const Navbar = () => {
               onMouseEnter={() => setHoveredTab(item.label)}
               className={`glass-nav-link ${isActive ? 'active' : ''}`}
             >
-              {/* Layer 1: Primary Active Page Slider */}
               {isActive && (
                 <motion.span
                   layoutId="nav-active-pill"
@@ -137,7 +129,6 @@ const Navbar = () => {
                 />
               )}
 
-              {/* Layer 2: Soft Magnetic Hover Pill */}
               <AnimatePresence>
                 {isHovered && !isActive && (
                   <motion.span
@@ -162,7 +153,7 @@ const Navbar = () => {
         })}
       </nav>
 
-      {/* Right: Cream Circle Power Button + Two-Line Glass Pill */}
+      {/* Right: Log In & Sign Up ↗ Buttons */}
       <div
         style={{
           display: 'flex',
@@ -195,24 +186,37 @@ const Navbar = () => {
           </button>
         )}
 
-        <button
-          onClick={handleAuthClick}
-          className="circle-icon-btn circle-btn-cream"
-          title={user ? 'Sign Out' : 'Sign In'}
-        >
-          <Power size={16} strokeWidth={2.2} />
-        </button>
+        {user ? (
+          <>
+            <button
+              className="circle-btn-glass"
+              title="Notifications"
+              style={{ width: '40px' }}
+            >
+              <Bell size={16} />
+            </button>
 
-        <button className="circle-btn-glass" title="Menu">
-          <svg width="16" height="10" viewBox="0 0 16 10" fill="none">
-            <path
-              d="M1 2H15M1 8H15"
-              stroke="#F3EFE6"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-            />
-          </svg>
-        </button>
+            <button
+              onClick={handleLogout}
+              className="nav-login-btn"
+              style={{ gap: '6px' }}
+            >
+              <span>Sign Out</span>
+              <LogOut size={14} />
+            </button>
+          </>
+        ) : (
+          <>
+            <Link to="/login?mode=login" className="nav-login-btn">
+              Log In
+            </Link>
+
+            <Link to="/login?mode=register" className="nav-signup-btn">
+              <span>Sign Up</span>
+              <span style={{ fontSize: '13px', lineHeight: 1 }}>↗</span>
+            </Link>
+          </>
+        )}
       </div>
     </motion.header>
   );

@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   motion,
   AnimatePresence,
@@ -22,9 +22,8 @@ import {
   HeartHandshake,
   CalendarX2,
 } from 'lucide-react';
-import { api } from '../context/AuthContext';
+import { api, useAuth } from '../context/AuthContext';
 
-// 5 Authentic Platform Features for Patients & Doctors (Zero Fabricated Numbers or Hardcoded Names)
 const PLATFORM_STORIES = [
   {
     id: 'specialists',
@@ -95,22 +94,22 @@ const PLATFORM_STORIES = [
   {
     id: 'prescriptions',
     label: 'Health Records Vault',
-    audienceBadge: 'ORGANIZED MEDICAL HISTORY',
-    title: 'Digital prescriptions & personal health records.',
+    audienceBadge: 'SECURITY & PRIVACY',
+    title: 'Digital prescriptions & encrypted health records.',
     description:
-      'Keep your consultation notes, prescriptions, and uploaded diagnostic reports organized in your personal dashboard so they are always ready for your next appointment.',
-    highlightStat: 'Centralized Patient Dashboard',
-    highlightSub: 'Access upcoming calls and past records in one place',
+      'Keep your consultation notes, prescriptions, and uploaded diagnostic reports organized and encrypted in your personal vault so they are only accessible by you and your doctor.',
+    highlightStat: 'Encrypted Patient Vault',
+    highlightSub: 'Private access to upcoming calls and medical records',
     ctaText: 'Open Health Vault',
     ctaLink: '/vault',
     icon: FileCheck2,
     topFloatingPill: 'Private Patient Records',
-    bottomFloatingBadge: 'Instant Dashboard Access',
+    bottomFloatingBadge: 'Protected Medical History',
     sculptureHeader: 'Patient Health Vault',
     sculptureSub: 'Prescriptions & Diagnostic Files',
     sculptureItems: [
       { label: 'Consultation Notes & Prescriptions', tag: 'Organized' },
-      { label: 'Lab Reports & Medical Uploads', tag: 'Accessible' },
+      { label: 'Lab Reports & Medical Uploads', tag: 'Encrypted' },
       { label: 'Authorized Doctor Review During Call', tag: 'Seamless' },
     ],
   },
@@ -124,7 +123,7 @@ const PLATFORM_STORIES = [
     highlightStat: 'Custom Schedule Builder',
     highlightSub: 'Set recurring weekly rules, slot lengths, and buffer times',
     ctaText: 'Join as a Specialist',
-    ctaLink: '/login',
+    ctaLink: '/login?mode=register&role=doctor',
     icon: Stethoscope,
     topFloatingPill: 'Accepting Consultations • Online',
     bottomFloatingBadge: 'Dedicated Specialist Console',
@@ -138,7 +137,6 @@ const PLATFORM_STORIES = [
   },
 ];
 
-// Helper 1: Unbiased Fisher-Yates shuffle to randomize available doctors
 const shuffleDoctors = (array) => {
   const copy = [...array];
   for (let i = copy.length - 1; i > 0; i--) {
@@ -148,12 +146,10 @@ const shuffleDoctors = (array) => {
   return copy;
 };
 
-// Helper 2: Format readable time from a Slot document or string
 const formatSlotTime = (slotItem) => {
   if (!slotItem) return '';
   if (typeof slotItem === 'string') return slotItem;
   if (slotItem.startTime) {
-    // Handles ISO date strings or "09:00" strings
     if (slotItem.startTime.includes('T')) {
       const dateObj = new Date(slotItem.startTime);
       if (!isNaN(dateObj.getTime())) {
@@ -166,16 +162,13 @@ const formatSlotTime = (slotItem) => {
   return '';
 };
 
-// Helper 3: Determine human-readable Consultation Mode ("Video Consult" vs "In-Person")
 const getConsultationModeLabel = (doc, openSlots) => {
-  // Check modes on open slots first if present
   const slotModes = new Set(
     (openSlots || [])
       .map((s) => (typeof s === 'object' ? s.mode || s.consultationMode : null))
       .filter(Boolean)
   );
 
-  // Also check doctor profile modes
   const rawDocModes =
     doc.consultationModes ||
     doc.modes ||
@@ -195,7 +188,6 @@ const getConsultationModeLabel = (doc, openSlots) => {
   if (hasPhysical) return 'In-Person Clinic';
   if (hasVideo) return 'Video Consult';
 
-  // Fallback if schema stores boolean flags
   if (doc.isVideoAvailable && doc.isInPersonAvailable) return 'Video & In-Person';
   if (doc.isInPersonAvailable) return 'In-Person Clinic';
   return 'Video Consult';
@@ -203,8 +195,8 @@ const getConsultationModeLabel = (doc, openSlots) => {
 
 const Landing = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
-  // State for up to 2 randomized doctors who actively have open slots
   const [availableDoctors, setAvailableDoctors] = useState([]);
   const [loadingDoctors, setLoadingDoctors] = useState(true);
   const [activeChapter, setActiveChapter] = useState(0);
@@ -212,12 +204,27 @@ const Landing = () => {
   const trackRef = useRef(null);
   const lastChapterRef = useRef(0);
 
+  // Smart Gate: If user is NOT logged in, route them to Login/Register with a redirect target
+  const handleProtectedAction = useCallback(
+    (targetPath) => {
+      if (!user) {
+        if (targetPath.startsWith('/login')) {
+          navigate(targetPath);
+        } else {
+          navigate(`/login?mode=login&redirect=${encodeURIComponent(targetPath)}`);
+        }
+      } else {
+        navigate(targetPath);
+      }
+    },
+    [user, navigate]
+  );
+
   const { scrollYProgress } = useScroll({
     target: trackRef,
-    offset: ['start 180px', 'end end'],
+    offset: ['start start', 'end end'],
   });
 
-  // GPU-accelerated spring physics
   const smoothProgress = useSpring(scrollYProgress, {
     stiffness: 180,
     damping: 30,
@@ -239,14 +246,25 @@ const Landing = () => {
     }
   });
 
-  const handleStoryClick = (index) => {
+  const handleStoryClick = useCallback((index) => {
     if (!trackRef.current) return;
     const rect = trackRef.current.getBoundingClientRect();
-    const trackTop = window.scrollY + rect.top - 110;
+    const trackTop = window.scrollY + rect.top;
     const scrollable = trackRef.current.offsetHeight - window.innerHeight;
-    const targetScroll = trackTop + (index / PLATFORM_STORIES.length) * scrollable + 20;
+    const targetScroll = trackTop + (index / PLATFORM_STORIES.length) * scrollable + 12;
     window.scrollTo({ top: targetScroll, behavior: 'smooth' });
-  };
+  }, []);
+
+  // Listen for Guest Navbar clicks ("Specialties" / "Security & Privacy")
+  useEffect(() => {
+    const onNavbarChapterJump = (e) => {
+      if (typeof e.detail === 'number') {
+        handleStoryClick(e.detail);
+      }
+    };
+    window.addEventListener('vitalise:scroll-chapter', onNavbarChapterJump);
+    return () => window.removeEventListener('vitalise:scroll-chapter', onNavbarChapterJump);
+  }, [handleStoryClick]);
 
   // 3D Tilt Physics for the Top-Right Hero Widget
   const mouseX = useMotionValue(0);
@@ -266,7 +284,6 @@ const Landing = () => {
     mouseY.set(0);
   };
 
-  // Fetch doctors -> Check each doctor's open slots -> Filter only available -> Randomize -> Max 2
   useEffect(() => {
     let isMounted = true;
 
@@ -284,19 +301,16 @@ const Landing = () => {
           return;
         }
 
-        // Check open slots for each doctor in parallel
         const enrichedDoctors = await Promise.all(
           rawList.map(async (doc) => {
             const docId = doc._id || doc.id;
             let rawSlots = [];
 
-            // 1. Check if search endpoint already embedded slots
             if (Array.isArray(doc.availableSlots) && doc.availableSlots.length > 0) {
               rawSlots = doc.availableSlots;
             } else if (Array.isArray(doc.slots) && doc.slots.length > 0) {
               rawSlots = doc.slots;
             } else if (docId) {
-              // 2. Otherwise query the live slots endpoint for this doctor
               try {
                 const slotRes = await api.get(`/booking/slots/${docId}`);
                 rawSlots =
@@ -308,7 +322,6 @@ const Landing = () => {
               }
             }
 
-            // Filter strictly for open / unbooked slots
             const openSlots = (rawSlots || []).filter((s) => {
               if (!s) return false;
               if (typeof s === 'string') return true;
@@ -326,10 +339,7 @@ const Landing = () => {
           })
         );
 
-        // Keep only doctors who actually have at least 1 open slot
         const validAvailableDoctors = enrichedDoctors.filter(Boolean);
-
-        // Randomize order and pick at most 2
         const randomizedMaxTwo = shuffleDoctors(validAvailableDoctors).slice(0, 2);
 
         if (isMounted) {
@@ -355,7 +365,8 @@ const Landing = () => {
   const handleSlotClick = (doctorId, slotItem) => {
     const slotIdOrTime =
       typeof slotItem === 'object' ? slotItem._id || formatSlotTime(slotItem) : slotItem;
-    navigate(`/search?doctor=${doctorId}&slot=${encodeURIComponent(slotIdOrTime)}`);
+    const targetUrl = `/patient/checkout/${doctorId}?slot=${encodeURIComponent(slotIdOrTime)}`;
+    handleProtectedAction(targetUrl);
   };
 
   const containerVariants = {
@@ -387,13 +398,13 @@ const Landing = () => {
       style={{ width: '100%' }}
     >
       {/* =====================================================================
-          1. HERO SECTION
+          1. HERO SECTION (SITS IMMEDIATELY ABOVE THE UNIFIED STORYTELLER TRACK)
           ===================================================================== */}
       <section
         style={{
           minHeight: 'calc(100vh - 148px)',
           width: '100%',
-          padding: '32px 48px 38px 48px',
+          padding: '32px 48px 36px 48px',
           display: 'grid',
           gridTemplateColumns: '1.25fr 420px',
           gap: '48px',
@@ -440,21 +451,30 @@ const Landing = () => {
             variants={itemUpVariants}
             style={{ display: 'flex', alignItems: 'center', gap: '28px' }}
           >
-            <Link to="/search" className="btn-cream-pill">
+            <button
+              type="button"
+              onClick={() => handleProtectedAction('/search')}
+              className="btn-cream-pill"
+            >
               <span>Book a consult</span>
               <span className="arrow-cycle-box">
                 <span className="arrow-icon-primary">↗</span>
                 <span className="arrow-icon-clone">↗</span>
               </span>
-            </Link>
+            </button>
 
-            <Link to="/search" className="explore-link-animated">
+            <button
+              type="button"
+              onClick={() => handleProtectedAction('/search')}
+              className="explore-link-animated"
+              style={{ background: 'none', border: 'none' }}
+            >
               <span>Explore specialists</span>
               <span className="arrow-cycle-box">
                 <span className="arrow-icon-primary">↗</span>
                 <span className="arrow-icon-clone">↗</span>
               </span>
-            </Link>
+            </button>
           </motion.div>
         </motion.div>
 
@@ -483,7 +503,6 @@ const Landing = () => {
             }}
             className="glass-widget-outer"
           >
-            {/* Top Grab Handle */}
             <div
               style={{
                 width: '38px',
@@ -494,7 +513,6 @@ const Landing = () => {
               }}
             />
 
-            {/* Widget Header */}
             <div
               style={{
                 display: 'flex',
@@ -517,7 +535,6 @@ const Landing = () => {
               </span>
             </div>
 
-            {/* CASE 1: Loading Shimmer State */}
             {loadingDoctors ? (
               <div
                 className="glass-widget-inner"
@@ -559,7 +576,6 @@ const Landing = () => {
                 </div>
               </div>
             ) : availableDoctors.length > 0 ? (
-              /* CASE 2: Render Up to 2 Randomized Available Doctors */
               availableDoctors.map((doc, idx) => {
                 const docId = doc._id || doc.id;
                 const docName = doc.userId?.name || doc.name || 'Verified Specialist';
@@ -635,7 +651,6 @@ const Landing = () => {
                       )}
                     </div>
 
-                    {/* Open Time Slots + Consultation Mode Pill (Video or Physical) */}
                     <div
                       style={{
                         display: 'flex',
@@ -660,7 +675,6 @@ const Landing = () => {
                         })}
                       </div>
 
-                      {/* Dynamic Mode Badge: "Video Consult", "In-Person Clinic", or "Video & In-Person" */}
                       <span
                         style={{
                           fontSize: '12px',
@@ -679,7 +693,6 @@ const Landing = () => {
                 );
               })
             ) : (
-              /* CASE 3: Zero Doctors Have Open Slots Right Now */
               <div
                 className="glass-widget-inner"
                 style={{
@@ -724,24 +737,23 @@ const Landing = () => {
                     marginTop: '2px',
                   }}
                 >
-                  You can still browse our specialist directory to view upcoming weekly
-                  schedules and advance booking windows.
+                  Sign in to browse full weekly schedules and advance booking windows.
                 </p>
 
                 <div style={{ marginTop: '6px' }}>
-                  <Link
-                    to="/search"
+                  <button
+                    type="button"
+                    onClick={() => handleProtectedAction('/search')}
                     className="time-slot-btn primary"
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: '6px',
-                      textDecoration: 'none',
                     }}
                   >
                     <span>Check Upcoming Schedules</span>
                     <span>↗</span>
-                  </Link>
+                  </button>
                 </div>
               </div>
             )}
@@ -750,300 +762,303 @@ const Landing = () => {
       </section>
 
       {/* =====================================================================
-          2. FRAMELESS STORYTELLER BAR (GPU SCALEX — ZERO REACT RE-RENDERS)
+          2. UNIFIED STICKY SHOWCASE TRACK (BAR + STAGE MOVE TOGETHER AS ONE UNIT!)
           ===================================================================== */}
-      <div className="storyteller-sticky-wrapper">
-        <div className="storyteller-bar-surface">
-          <motion.div
-            style={{
-              position: 'absolute',
-              top: '-1.5px',
-              left: 0,
-              width: '100%',
-              height: '2px',
-              background: 'var(--cream)',
-              transformOrigin: 'left center',
-              scaleX: lineScaleX,
-              willChange: 'transform',
-            }}
-          />
+      <section ref={trackRef} className="story-chapters-track">
+        <div className="story-unified-sticky-viewport">
+          {/* TOP OF STICKY VIEWPORT: THE FRAMELESS STORYTELLER BAR */}
+          <div className="storyteller-bar-surface">
+            <motion.div
+              style={{
+                position: 'absolute',
+                top: '-1.5px',
+                left: 0,
+                width: '100%',
+                height: '2px',
+                background: 'var(--cream)',
+                transformOrigin: 'left center',
+                scaleX: lineScaleX,
+                willChange: 'transform',
+              }}
+            />
 
-          {PLATFORM_STORIES.map((story, idx) => {
-            const isActive = idx === activeChapter;
-            const isCompleted = idx < activeChapter;
+            {PLATFORM_STORIES.map((story, idx) => {
+              const isActive = idx === activeChapter;
+              const isCompleted = idx < activeChapter;
 
-            return (
-              <div
-                key={story.id}
-                onClick={() => handleStoryClick(idx)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  fontSize: '14px',
-                  color: isActive
-                    ? '#ffffff'
-                    : isCompleted
-                    ? 'var(--cream-soft)'
-                    : 'var(--cream-muted)',
-                  fontWeight: isActive ? 500 : 400,
-                  cursor: 'pointer',
-                  transition: 'color 0.2s ease',
-                  userSelect: 'none',
-                }}
-              >
-                <span style={{ color: 'var(--cream)', fontSize: '15px', lineHeight: 1 }}>
-                  +
-                </span>
-                <span>{story.label}</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* =====================================================================
-          3. THE 5-CHAPTER STICKY SCROLL TRACK
-          ===================================================================== */}
-      <section ref={trackRef} className="story-chapters-track" style={{ marginTop: '48px' }}>
-        <div className="story-chapters-stage">
-          <div
-            style={{
-              width: '100%',
-              display: 'grid',
-              gridTemplateColumns: '1.15fr 1fr',
-              gap: '64px',
-              alignItems: 'center',
-            }}
-          >
-            {/* LEFT SIDE */}
-            <div style={{ maxWidth: '580px' }}>
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={currentStory.id}
-                  initial={{ opacity: 0, y: 18 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -14 }}
-                  transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
-                  style={{ willChange: 'transform, opacity' }}
+              return (
+                <div
+                  key={story.id}
+                  onClick={() => handleStoryClick(idx)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    fontSize: '14px',
+                    color: isActive
+                      ? '#ffffff'
+                      : isCompleted
+                      ? 'var(--cream-soft)'
+                      : 'var(--cream-muted)',
+                    fontWeight: isActive ? 500 : 400,
+                    cursor: 'pointer',
+                    transition: 'color 0.2s ease',
+                    userSelect: 'none',
+                  }}
                 >
-                  <div
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '6px 14px',
-                      borderRadius: '999px',
-                      background: 'rgba(255, 255, 255, 0.09)',
-                      border: '1px solid rgba(255, 255, 255, 0.2)',
-                      fontSize: '11.5px',
-                      fontWeight: 500,
-                      letterSpacing: '0.07em',
-                      color: 'var(--cream)',
-                      marginBottom: '22px',
-                    }}
-                  >
-                    <Sparkles size={12} />
-                    <span>{currentStory.audienceBadge}</span>
-                  </div>
+                  <span style={{ color: 'var(--cream)', fontSize: '15px', lineHeight: 1 }}>
+                    +
+                  </span>
+                  <span>{story.label}</span>
+                </div>
+              );
+            })}
+          </div>
 
-                  <h2
-                    className="hero-display-title"
-                    style={{
-                      fontSize: 'clamp(2.5rem, 4.3vw, 3.85rem)',
-                      marginBottom: '20px',
-                    }}
-                  >
-                    {currentStory.title}
-                  </h2>
-
-                  <p
-                    style={{
-                      fontSize: '17px',
-                      lineHeight: 1.62,
-                      color: 'var(--cream-soft)',
-                      marginBottom: '30px',
-                    }}
-                  >
-                    {currentStory.description}
-                  </p>
-
-                  <div
-                    className="glass-widget-inner"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '16px',
-                      padding: '16px 22px',
-                      borderRadius: '18px',
-                      marginBottom: '30px',
-                      maxWidth: '470px',
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: '44px',
-                        height: '44px',
-                        borderRadius: '13px',
-                        background: 'var(--cream)',
-                        color: 'var(--ink-dark)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexShrink: 0,
-                      }}
-                    >
-                      <StoryIcon size={21} strokeWidth={2} />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '15.5px', fontWeight: 500, color: '#ffffff' }}>
-                        {currentStory.highlightStat}
-                      </div>
-                      <div style={{ fontSize: '13px', color: 'var(--cream-soft)', marginTop: '2px' }}>
-                        {currentStory.highlightSub}
-                      </div>
-                    </div>
-                  </div>
-
-                  <Link to={currentStory.ctaLink} className="btn-cream-pill">
-                    <span>{currentStory.ctaText}</span>
-                    <span className="arrow-cycle-box">
-                      <span className="arrow-icon-primary">↗</span>
-                      <span className="arrow-icon-clone">↗</span>
-                    </span>
-                  </Link>
-                </motion.div>
-              </AnimatePresence>
-            </div>
-
-            {/* RIGHT SIDE: 3D Multi-Plane Glass Sculpture */}
-            <div className="sculpture-3d-scene">
-              <motion.div
-                style={{
-                  rotateY: sculptureRotateY,
-                  rotateX: sculptureRotateX,
-                  y: sculptureFloatY,
-                }}
-                className="sculpture-3d-assembly"
-              >
-                <div className="sculpture-ring-outer" />
-                <div className="sculpture-ring-inner" />
-                <div className="sculpture-back-glass" />
-
+          {/* BELOW THE BAR: THE 5-CHAPTER STAGE (NEVER COLLIDES WITH BAR OR FOOTER) */}
+          <div className="story-chapters-stage">
+            <div
+              style={{
+                width: '100%',
+                display: 'grid',
+                gridTemplateColumns: '1.15fr 1fr',
+                gap: '64px',
+                alignItems: 'center',
+              }}
+            >
+              {/* LEFT SIDE */}
+              <div style={{ maxWidth: '580px' }}>
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={currentStory.id}
-                    initial={{ opacity: 0, scale: 0.94, rotateY: -10 }}
-                    animate={{ opacity: 1, scale: 1, rotateY: 0 }}
-                    exit={{ opacity: 0, scale: 0.95, rotateY: 10 }}
-                    transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      position: 'relative',
-                      transformStyle: 'preserve-3d',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      willChange: 'transform, opacity',
-                    }}
+                    initial={{ opacity: 0, y: 18 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -14 }}
+                    transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
+                    style={{ willChange: 'transform, opacity' }}
                   >
-                    <div className="sculpture-floating-pill-top">
-                      <span
-                        style={{
-                          width: '7px',
-                          height: '7px',
-                          borderRadius: '50%',
-                          backgroundColor: '#84b59f',
-                        }}
-                      />
-                      <span>{currentStory.topFloatingPill}</span>
+                    <div
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '6px 14px',
+                        borderRadius: '999px',
+                        background: 'rgba(255, 255, 255, 0.09)',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        fontSize: '11.5px',
+                        fontWeight: 500,
+                        letterSpacing: '0.07em',
+                        color: 'var(--cream)',
+                        marginBottom: '20px',
+                      }}
+                    >
+                      <Sparkles size={12} />
+                      <span>{currentStory.audienceBadge}</span>
                     </div>
 
-                    <div className="sculpture-main-glass">
+                    <h2
+                      className="hero-display-title"
+                      style={{
+                        fontSize: 'clamp(2.4rem, 4.1vw, 3.65rem)',
+                        marginBottom: '18px',
+                      }}
+                    >
+                      {currentStory.title}
+                    </h2>
+
+                    <p
+                      style={{
+                        fontSize: '16.5px',
+                        lineHeight: 1.6,
+                        color: 'var(--cream-soft)',
+                        marginBottom: '26px',
+                      }}
+                    >
+                      {currentStory.description}
+                    </p>
+
+                    <div
+                      className="glass-widget-inner"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '16px',
+                        padding: '15px 20px',
+                        borderRadius: '18px',
+                        marginBottom: '26px',
+                        maxWidth: '470px',
+                      }}
+                    >
                       <div
                         style={{
+                          width: '42px',
+                          height: '42px',
+                          borderRadius: '13px',
+                          background: 'var(--cream)',
+                          color: 'var(--ink-dark)',
                           display: 'flex',
                           alignItems: 'center',
-                          justifyContent: 'space-between',
-                          marginBottom: '18px',
+                          justifyContent: 'center',
+                          flexShrink: 0,
                         }}
                       >
-                        <div>
-                          <div style={{ fontSize: '17px', fontWeight: 500, color: '#ffffff' }}>
-                            {currentStory.sculptureHeader}
-                          </div>
-                          <div
-                            style={{
-                              fontSize: '12.5px',
-                              color: 'rgba(255, 255, 255, 0.78)',
-                              marginTop: '3px',
-                            }}
-                          >
-                            {currentStory.sculptureSub}
-                          </div>
-                        </div>
-
-                        <div
-                          style={{
-                            width: '38px',
-                            height: '38px',
-                            borderRadius: '12px',
-                            background: 'rgba(255, 255, 255, 0.14)',
-                            border: '1px solid rgba(255, 255, 255, 0.24)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: 'var(--cream)',
-                          }}
-                        >
-                          <StoryIcon size={18} />
-                        </div>
+                        <StoryIcon size={20} strokeWidth={2} />
                       </div>
-
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        {currentStory.sculptureItems.map((item) => (
-                          <div
-                            key={item.label}
-                            style={{
-                              padding: '10px 13px',
-                              borderRadius: '12px',
-                              background: 'rgba(255, 255, 255, 0.09)',
-                              border: '1px solid rgba(255, 255, 255, 0.15)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              gap: '10px',
-                            }}
-                          >
-                            <span style={{ fontSize: '12.5px', color: '#ffffff' }}>
-                              {item.label}
-                            </span>
-                            <span
-                              style={{
-                                fontSize: '11px',
-                                fontWeight: 500,
-                                padding: '3px 9px',
-                                borderRadius: '999px',
-                                background: 'rgba(243, 239, 230, 0.16)',
-                                color: 'var(--cream)',
-                                whiteSpace: 'nowrap',
-                              }}
-                            >
-                              {item.tag}
-                            </span>
-                          </div>
-                        ))}
+                      <div>
+                        <div style={{ fontSize: '15px', fontWeight: 500, color: '#ffffff' }}>
+                          {currentStory.highlightStat}
+                        </div>
+                        <div style={{ fontSize: '13px', color: 'var(--cream-soft)', marginTop: '2px' }}>
+                          {currentStory.highlightSub}
+                        </div>
                       </div>
                     </div>
 
-                    <div className="sculpture-floating-card-bottom">
-                      <HeartHandshake size={15} />
-                      <span>{currentStory.bottomFloatingBadge}</span>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleProtectedAction(currentStory.ctaLink)}
+                      className="btn-cream-pill"
+                    >
+                      <span>{currentStory.ctaText}</span>
+                      <span className="arrow-cycle-box">
+                        <span className="arrow-icon-primary">↗</span>
+                        <span className="arrow-icon-clone">↗</span>
+                      </span>
+                    </button>
                   </motion.div>
                 </AnimatePresence>
-              </motion.div>
+              </div>
+
+              {/* RIGHT SIDE: 3D Multi-Plane Glass Sculpture */}
+              <div className="sculpture-3d-scene">
+                <motion.div
+                  style={{
+                    rotateY: sculptureRotateY,
+                    rotateX: sculptureRotateX,
+                    y: sculptureFloatY,
+                  }}
+                  className="sculpture-3d-assembly"
+                >
+                  <div className="sculpture-ring-outer" />
+                  <div className="sculpture-ring-inner" />
+                  <div className="sculpture-back-glass" />
+
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={currentStory.id}
+                      initial={{ opacity: 0, scale: 0.94, rotateY: -10 }}
+                      animate={{ opacity: 1, scale: 1, rotateY: 0 }}
+                      exit={{ opacity: 0, scale: 0.95, rotateY: 10 }}
+                      transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        position: 'relative',
+                        transformStyle: 'preserve-3d',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        willChange: 'transform, opacity',
+                      }}
+                    >
+                      <div className="sculpture-floating-pill-top">
+                        <span
+                          style={{
+                            width: '7px',
+                            height: '7px',
+                            borderRadius: '50%',
+                            backgroundColor: '#84b59f',
+                          }}
+                        />
+                        <span>{currentStory.topFloatingPill}</span>
+                      </div>
+
+                      <div className="sculpture-main-glass">
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            marginBottom: '18px',
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontSize: '17px', fontWeight: 500, color: '#ffffff' }}>
+                              {currentStory.sculptureHeader}
+                            </div>
+                            <div
+                              style={{
+                                fontSize: '12.5px',
+                                color: 'rgba(255, 255, 255, 0.78)',
+                                marginTop: '3px',
+                              }}
+                            >
+                              {currentStory.sculptureSub}
+                            </div>
+                          </div>
+
+                          <div
+                            style={{
+                              width: '38px',
+                              height: '38px',
+                              borderRadius: '12px',
+                              background: 'rgba(255, 255, 255, 0.14)',
+                              border: '1px solid rgba(255, 255, 255, 0.24)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: 'var(--cream)',
+                            }}
+                          >
+                            <StoryIcon size={18} />
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          {currentStory.sculptureItems.map((item) => (
+                            <div
+                              key={item.label}
+                              style={{
+                                padding: '10px 13px',
+                                borderRadius: '12px',
+                                background: 'rgba(255, 255, 255, 0.09)',
+                                border: '1px solid rgba(255, 255, 255, 0.15)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: '10px',
+                              }}
+                            >
+                              <span style={{ fontSize: '12.5px', color: '#ffffff' }}>
+                                {item.label}
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: '11px',
+                                  fontWeight: 500,
+                                  padding: '3px 9px',
+                                  borderRadius: '999px',
+                                  background: 'rgba(243, 239, 230, 0.16)',
+                                  color: 'var(--cream)',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {item.tag}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="sculpture-floating-card-bottom">
+                        <HeartHandshake size={15} />
+                        <span>{currentStory.bottomFloatingBadge}</span>
+                      </div>
+                    </motion.div>
+                  </AnimatePresence>
+                </motion.div>
+              </div>
             </div>
           </div>
         </div>

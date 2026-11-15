@@ -23,10 +23,12 @@ html, body, #root {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   -webkit-font-smoothing: antialiased;
   overflow-x: clip;
+  /* Hide scrollbar in Firefox and old Edge */
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
 
+/* Hide scrollbar in Chrome, Safari, Brave, and Chromium Edge */
 html::-webkit-scrollbar,
 body::-webkit-scrollbar,
 *::-webkit-scrollbar {
@@ -44,6 +46,7 @@ body::-webkit-scrollbar,
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  /* CRITICAL: overflow-x: clip allows position: sticky to run smoothly */
   overflow-x: clip;
   background-color: #0e1626;
   z-index: 1;
@@ -131,6 +134,13 @@ body::-webkit-scrollbar,
   transition: border-color 0.35s ease, box-shadow 0.35s ease;
 }
 
+.glass-widget-outer:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow: 
+    0 34px 72px rgba(4, 9, 18, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32);
+}
+
 .glass-widget-outer::before {
   content: '';
   position: absolute;
@@ -161,7 +171,16 @@ body::-webkit-scrollbar,
   box-shadow: 
     0 8px 24px rgba(8, 14, 26, 0.18),
     inset 0 1px 0 rgba(255, 255, 255, 0.24);
-  transition: transform 0.35s cubic-bezier(0.19, 1, 0.22, 1), border-color 0.35s ease;
+  transition: transform 0.35s cubic-bezier(0.19, 1, 0.22, 1), border-color 0.35s ease, background 0.35s ease;
+}
+
+.glass-widget-inner:hover {
+  border-color: rgba(255, 255, 255, 0.32);
+  background: linear-gradient(
+    145deg,
+    rgba(175, 194, 224, 0.27) 0%,
+    rgba(128, 148, 182, 0.2) 100%
+  );
 }
 
 .glass-card {
@@ -181,7 +200,7 @@ body::-webkit-scrollbar,
 }
 
 /* =========================================================================
-   3. LIQUID NAVBAR PILL
+   3. LIQUID NAVBAR PILL & AUTH BUTTONS
    ========================================================================= */
 .glass-nav-pill {
   position: relative;
@@ -243,6 +262,55 @@ body::-webkit-scrollbar,
   z-index: -2;
 }
 
+/* Explicit Navbar Auth Buttons (Log In & Sign Up ↗) */
+.nav-login-btn {
+  padding: 9px 18px;
+  border-radius: 9999px;
+  background: rgba(42, 56, 84, 0.38);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  color: var(--cream);
+  font-size: 13.5px;
+  font-weight: 400;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.25s cubic-bezier(0.19, 1, 0.22, 1), border-color 0.25s ease, background 0.25s ease;
+}
+
+.nav-login-btn:hover {
+  transform: translateY(-1.5px);
+  border-color: rgba(255, 255, 255, 0.42);
+  background: rgba(58, 76, 110, 0.5);
+  color: #ffffff;
+}
+
+.nav-signup-btn {
+  padding: 9px 20px;
+  border-radius: 9999px;
+  background-color: var(--cream);
+  color: var(--ink-dark);
+  font-size: 13.5px;
+  font-weight: 500;
+  text-decoration: none;
+  border: 1px solid var(--cream);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(6, 11, 22, 0.2);
+  transition: transform 0.25s cubic-bezier(0.19, 1, 0.22, 1), background-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.nav-signup-btn:hover {
+  background-color: #ffffff;
+  transform: translateY(-1.5px);
+  box-shadow: 0 10px 24px rgba(6, 11, 22, 0.3);
+}
+
 .circle-icon-btn {
   width: 40px;
   height: 40px;
@@ -279,12 +347,13 @@ body::-webkit-scrollbar,
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: transform 0.3s cubic-bezier(0.19, 1, 0.22, 1), border-color 0.3s ease;
+  transition: transform 0.3s cubic-bezier(0.19, 1, 0.22, 1), border-color 0.3s ease, background 0.35s ease;
 }
 
 .circle-btn-glass:hover {
   transform: translateY(-1.5px);
   border-color: rgba(255, 255, 255, 0.38);
+  background: rgba(58, 76, 110, 0.48);
 }
 
 /* =========================================================================
@@ -348,6 +417,10 @@ body::-webkit-scrollbar,
 
 .btn-cream-pill:hover::before {
   left: 140%;
+}
+
+.btn-cream-pill:active {
+  transform: translateY(0px) scale(0.98);
 }
 
 .explore-link-animated {
@@ -467,15 +540,26 @@ body::-webkit-scrollbar,
 }
 
 /* =========================================================================
-   6. GPU-ACCELERATED STORYTELLER BAR & 3D SCULPTURE STAGE (60/120 FPS)
+   6. UNIFIED STICKY STORYTELLER VIEWPORT & 3D SCULPTURE STAGE
    ========================================================================= */
-.storyteller-sticky-wrapper {
+.story-chapters-track {
+  position: relative;
+  width: 100%;
+  height: 420vh;
+}
+
+/* Wraps BOTH the Storyteller Bar and the 3D Stage so they move together as one unit */
+.story-unified-sticky-viewport {
   position: sticky;
-  top: 28px;
-  z-index: 45;
+  top: 24px;
+  height: calc(100vh - 48px);
   width: 100%;
   padding: 0 48px;
-  transform: translateZ(0);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  z-index: 30;
+  will-change: transform;
 }
 
 .storyteller-bar-surface {
@@ -484,26 +568,18 @@ body::-webkit-scrollbar,
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   border-top: 1px solid rgba(255, 255, 255, 0.22);
-  padding: 20px 0 14px 0;
+  padding: 18px 0 14px 0;
   background: transparent;
-}
-
-.story-chapters-track {
-  position: relative;
-  width: 100%;
-  height: 420vh;
+  flex-shrink: 0;
 }
 
 .story-chapters-stage {
-  position: sticky;
-  top: 105px;
-  height: calc(100vh - 125px);
+  flex: 1;
   width: 100%;
-  padding: 0 48px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  will-change: transform;
+  padding-top: 16px;
 }
 
 .sculpture-3d-scene {
@@ -627,7 +703,7 @@ body::-webkit-scrollbar,
 }
 
 /* =========================================================================
-   7. VITALISE MATTE GLASS FOOTER (ADAPTED FROM CAREER VISTA STRUCTURE)
+   7. VITALISE MATTE GLASS FOOTER
    ========================================================================= */
 .vitalise-footer {
   position: relative;
@@ -707,7 +783,6 @@ body::-webkit-scrollbar,
   transform: translateX(4px);
 }
 
-/* Secondary Frosted Pill Button for Footer CTA */
 .btn-glass-pill {
   position: relative;
   overflow: hidden;
@@ -760,4 +835,347 @@ body::-webkit-scrollbar,
   padding-top: 4px;
   color: rgba(243, 239, 230, 0.48);
   font-size: 13px;
+}
+
+/* =========================================================================
+   8. AUTHENTICATION PORTAL (LOGIN & REGISTER MATTE GLASS UI)
+   ========================================================================= */
+.auth-page-wrapper {
+  flex: 1;
+  width: 100%;
+  max-width: 1380px;
+  margin: 0 auto;
+  padding: 36px 48px 64px 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auth-split-container {
+  position: relative;
+  width: 100%;
+  max-width: 1080px;
+  min-height: 600px;
+  border-radius: 26px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 
+    0 32px 72px rgba(4, 9, 20, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.26);
+  display: grid;
+  grid-template-columns: 1.05fr 1fr;
+  overflow: hidden;
+  z-index: 1;
+}
+
+/* Chrome-safe backdrop isolation on outer container */
+.auth-split-container::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    145deg,
+    rgba(36, 50, 76, 0.42) 0%,
+    rgba(20, 30, 48, 0.32) 100%
+  );
+  backdrop-filter: blur(22px) saturate(135%);
+  -webkit-backdrop-filter: blur(22px) saturate(135%);
+  z-index: -1;
+  pointer-events: none;
+}
+
+.auth-editorial-pane {
+  padding: 52px 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border-right: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(
+    160deg,
+    rgba(255, 255, 255, 0.04) 0%,
+    transparent 100%
+  );
+}
+
+.auth-form-pane {
+  padding: 48px 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: linear-gradient(
+    145deg,
+    rgba(165, 184, 214, 0.14) 0%,
+    rgba(118, 138, 172, 0.08) 100%
+  );
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+}
+
+/* Mode & Role Segmented Switchers */
+.auth-segmented-track {
+  position: relative;
+  background: rgba(15, 23, 38, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 9999px;
+  padding: 4px;
+  display: grid;
+  align-items: center;
+}
+
+.auth-segment-btn {
+  position: relative;
+  background: transparent;
+  border: none;
+  padding: 9px 16px;
+  border-radius: 9999px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: rgba(243, 239, 230, 0.75);
+  cursor: pointer;
+  z-index: 1;
+  transition: color 0.2s ease;
+  text-align: center;
+}
+
+.auth-segment-btn.active {
+  color: var(--ink-dark);
+}
+
+.auth-segment-btn.active-frosted {
+  color: #ffffff;
+}
+
+.auth-segment-pill-cream {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: var(--cream);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+  z-index: -1;
+}
+
+.auth-segment-pill-glass {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  z-index: -1;
+}
+
+/* Matte Frosted Input Fields */
+.auth-input-group {
+   position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.auth-input-label {
+  font-size: 12.5px;
+  font-weight: 400;
+  color: rgba(243, 239, 230, 0.78);
+  padding-left: 4px;
+}
+
+.auth-input-field {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 14px;
+  padding: 13px 16px;
+  color: #ffffff;
+  font-size: 14.5px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.22s ease, background 0.22s ease, box-shadow 0.22s ease;
+}
+
+.auth-input-field::placeholder {
+  color: rgba(243, 239, 230, 0.42);
+}
+
+.auth-input-field:focus {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(243, 239, 230, 0.65);
+  box-shadow: 0 0 0 3px rgba(243, 239, 230, 0.1);
+}
+
+.auth-select-field {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%23F3EFE6' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 16px center;
+  padding-right: 40px;
+}
+
+.auth-select-field option {
+  background-color: #141e30;
+  color: #F3EFE6;
+}
+
+@media (max-width: 920px) {
+  .auth-split-container {
+    grid-template-columns: 1fr;
+  }
+  .auth-editorial-pane {
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+    padding: 36px 32px;
+  }
+  .auth-form-pane {
+    padding: 36px 32px;
+  }
+}
+
+/* =========================================================================
+   9. CUSTOM FROSTED GLASS DROPDOWN MENU (REPLACES NATIVE <SELECT>)
+   ========================================================================= */
+.custom-glass-select-wrapper {
+  position: relative;
+  width: 100%;
+  user-select: none;
+}
+
+.custom-glass-select-trigger {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 14px;
+  padding: 13px 16px;
+  color: #ffffff;
+  font-size: 14.5px;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: border-color 0.22s ease, background 0.22s ease, box-shadow 0.22s ease;
+}
+
+.custom-glass-select-trigger:hover,
+.custom-glass-select-trigger.is-open {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(243, 239, 230, 0.6);
+}
+
+.custom-glass-select-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 100%;
+  background: linear-gradient(
+    155deg,
+    rgba(30, 43, 68, 0.94) 0%,
+    rgba(18, 27, 45, 0.96) 100%
+  );
+  backdrop-filter: blur(28px) saturate(150%);
+  -webkit-backdrop-filter: blur(28px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  border-radius: 16px;
+  padding: 6px;
+  box-shadow: 
+    0 24px 48px rgba(4, 8, 18, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  z-index: 80;
+  max-height: 230px;
+  overflow-y: auto;
+}
+
+.custom-glass-select-option {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: rgba(243, 239, 230, 0.85);
+  font-size: 14px;
+  font-family: inherit;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.custom-glass-select-option:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.custom-glass-select-option.selected {
+  background: var(--cream);
+  color: var(--ink-dark);
+  font-weight: 500;
+}
+
+/* =========================================================================
+   10. HIDE NATIVE NUMBER SPINNERS & STYLE CUSTOM FEE STEPPERS + DEGREE TAGS
+   ========================================================================= */
+/* Remove ugly white browser up/down arrows on number inputs */
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* Custom Matte Glass - / + Buttons inside Consultation Fee */
+.fee-stepper-controls {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.fee-step-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: var(--cream);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.15s ease;
+}
+
+.fee-step-btn:hover {
+  background: var(--cream);
+  color: var(--ink-dark);
+  border-color: var(--cream);
+}
+
+.fee-step-btn:active {
+  transform: scale(0.93);
+}
+
+/* Live Comma-Separated Qualification Pills */
+.qualification-tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.qualification-tag-pill {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(243, 239, 230, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+  font-size: 11.5px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }

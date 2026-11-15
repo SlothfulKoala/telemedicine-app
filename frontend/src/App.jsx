@@ -5,6 +5,9 @@ import { AuthProvider } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import Landing from './pages/Landing';
 import Footer from './components/Footer';
+import Specialties from './pages/Specialties';
+import SecurityPrivacy from './pages/SecurityPrivacy';
+import Login from './pages/Login';
 
 const AnimatedPreviewPage = ({ title, subtitle, primaryActionText, primaryActionLink }) => (
   <motion.main
@@ -51,6 +54,10 @@ const AnimatedRoutes = () => {
     <AnimatePresence mode="wait">
       <Routes location={location} key={location.pathname}>
         <Route path="/" element={<Landing />} />
+        <Route path="/specialties" element={<Specialties />} />
+        <Route path="/security" element={<SecurityPrivacy />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Login />} />
         <Route
           path="/search"
           element={
