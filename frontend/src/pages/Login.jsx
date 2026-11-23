@@ -6,7 +6,6 @@ import {
   EyeOff,
   CheckCircle2,
   AlertCircle,
-  ShieldCheck,
   Stethoscope,
   HeartHandshake,
   ChevronDown,
@@ -14,8 +13,22 @@ import {
   Sparkles,
   Minus,
   Plus,
+  Lock,
 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { api, useAuth } from '../context/AuthContext';
+
+const LOGIN_HIGHLIGHT = {
+  badge: 'WELCOME BACK',
+  headline: 'Welcome back to Vitalise.',
+  description:
+    'Sign in with your email and password. You will be automatically directed to your patient portal, specialist clinical console, or administrative dashboard.',
+  pillars: [
+    'Automatic role detection from your account',
+    'Direct access to your upcoming consultations',
+    'Private prescriptions and medical records',
+  ],
+  icon: Lock,
+};
 
 const ROLE_HIGHLIGHTS = {
   patient: {
@@ -38,25 +51,12 @@ const ROLE_HIGHLIGHTS = {
     pillars: [
       'Set all-video, all-clinic, or custom hybrid shifts in your schedule',
       'Clean daily patient timeline with one-click call launch',
-      'Review patient history and write prescriptions in seconds',
+      'Complete consultations & issue structured prescriptions',
     ],
     icon: Stethoscope,
   },
-  admin: {
-    badge: 'CLINICAL OPERATIONS',
-    headline: 'Hospital & platform management.',
-    description:
-      'Support doctors and patients with smooth onboarding, profile verification, and real-time appointment oversight.',
-    pillars: [
-      'Review and approve new specialist profiles',
-      'Monitor daily consultation activity across departments',
-      'Ensure smooth scheduling and patient support',
-    ],
-    icon: ShieldCheck,
-  },
 };
 
-// Expanded 26 Medical Specialties List
 const SPECIALTY_OPTIONS = [
   'Cardiology',
   'Dermatology',
@@ -76,17 +76,8 @@ const SPECIALTY_OPTIONS = [
   'Oncology',
   'Rheumatology',
   'Dentistry & Oral Care',
-  'Physiotherapy & Rehab',
-  'Nutrition & Dietetics',
-  'General Surgery',
-  'Plastic & Reconstructive Surgery',
-  'Infectious Diseases',
-  'Allergy & Immunology',
-  'Geriatrics',
-  'Sports Medicine',
 ];
 
-// Custom Matte Frosted Glass Dropdown (Starts with a placeholder until selected)
 const GlassSelect = ({ label, value, placeholder, options, onChange }) => {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -102,7 +93,7 @@ const GlassSelect = ({ label, value, placeholder, options, onChange }) => {
   }, []);
 
   return (
-    <div className="auth-input-group" ref={dropdownRef}>
+    <div className="auth-input-group" ref={dropdownRef} style={{ zIndex: open ? 90 : 1 }}>
       <label className="auth-input-label">{label}</label>
       <div className="custom-glass-select-wrapper">
         <button
@@ -160,12 +151,10 @@ const GlassSelect = ({ label, value, placeholder, options, onChange }) => {
 const Login = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { user, login, register } = useAuth();
+  const { user, setUser, login, register } = useAuth();
 
   const initialMode = searchParams.get('mode') === 'register' ? 'register' : 'login';
-  const initialRole = ['patient', 'doctor', 'admin'].includes(searchParams.get('role'))
-    ? searchParams.get('role')
-    : 'patient';
+  const initialRole = searchParams.get('role') === 'doctor' ? 'doctor' : 'patient';
   const redirectPath = searchParams.get('redirect') || '';
 
   const [mode, setMode] = useState(initialMode);
@@ -174,7 +163,6 @@ const Login = () => {
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // ALL FIELDS START COMPLETELY EMPTY (NO PRE-FILLED VALUES)
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -182,11 +170,10 @@ const Login = () => {
     password: '',
     specialisation: '',
     city: '',
-    fee: '',
+    feeRupees: '',
     qualifications: '',
   });
 
-  // Live comma-separated qualification array (e.g. "MBBS, MD" -> ["MBBS", "MD"])
   const parsedQualifications = formData.qualifications
     .split(',')
     .map((q) => q.trim())
@@ -199,13 +186,13 @@ const Login = () => {
       setMode(modeParam);
       setErrorMsg('');
     }
-    if (roleParam && ['patient', 'doctor', 'admin'].includes(roleParam)) {
+    if (roleParam && ['patient', 'doctor'].includes(roleParam)) {
       setRole(roleParam);
     }
   }, [modeParam, roleParam]);
 
   useEffect(() => {
-    if (user) {
+    if (user && !submitting) {
       if (redirectPath) {
         navigate(redirectPath, { replace: true });
       } else if (user.role === 'doctor') {
@@ -216,7 +203,7 @@ const Login = () => {
         navigate('/patient/dashboard', { replace: true });
       }
     }
-  }, [user, navigate, redirectPath]);
+  }, [user, submitting, navigate, redirectPath]);
 
   const handleModeSwitch = (nextMode) => {
     if (nextMode === mode) return;
@@ -231,9 +218,6 @@ const Login = () => {
     if (nextRole === role) return;
     setRole(nextRole);
     setErrorMsg('');
-    if (nextRole === 'admin' && mode === 'register') {
-      handleModeSwitch('login');
-    }
   };
 
   const handleChange = (e) => {
@@ -241,13 +225,12 @@ const Login = () => {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Custom Stepper handler for Consultation Fee (- / + ₹50)
   const handleFeeStep = (delta) => {
     setFormData((prev) => {
-      const currentVal = parseInt(prev.fee, 10);
+      const currentVal = parseInt(prev.feeRupees, 10);
       const base = isNaN(currentVal) ? 500 : currentVal;
-      const nextVal = Math.max(100, base + delta);
-      return { ...prev, fee: String(nextVal) };
+      const nextVal = Math.max(0, base + delta);
+      return { ...prev, feeRupees: String(nextVal) };
     });
   };
 
@@ -255,18 +238,29 @@ const Login = () => {
     e.preventDefault();
     setErrorMsg('');
 
-    if (mode === 'register' && role === 'doctor' && !formData.specialisation) {
-      setErrorMsg('Please select your medical specialty.');
+    if (formData.password.length < 8) {
+      setErrorMsg('Password must be at least 8 characters long.');
       return;
+    }
+
+    if (mode === 'register' && role === 'doctor') {
+      if (!formData.specialisation) {
+        setErrorMsg('Please select your medical specialty.');
+        return;
+      }
+      if (parsedQualifications.length === 0) {
+        setErrorMsg('Please enter at least one qualification (e.g. MBBS, MD).');
+        return;
+      }
     }
 
     setSubmitting(true);
 
     try {
       if (mode === 'login') {
-        const res = await login(formData.email.trim(), formData.password, role);
+        const res = await login(formData.email.trim(), formData.password);
         const loggedUser = res?.user;
-        const activeRole = loggedUser?.role || role;
+        const activeRole = loggedUser?.role;
 
         if (redirectPath) {
           navigate(redirectPath, { replace: true });
@@ -278,33 +272,45 @@ const Login = () => {
           navigate('/patient/dashboard', { replace: true });
         }
       } else {
-        const payload = {
+        const regRes = await register({
           name: formData.name.trim(),
           email: formData.email.trim(),
           phone: formData.phone.trim(),
           password: formData.password,
           role,
-        };
+        });
+
+        let finalUser = regRes?.user;
 
         if (role === 'doctor') {
-          payload.specialisation = formData.specialisation;
-          payload.specialisations = [{ name: formData.specialisation }];
-          payload.city = formData.city.trim();
-          payload.fee = Number(formData.fee) || 500;
-          // Sends both the separated array ["MBBS", "MD"] and clean string so any backend schema works
-          payload.qualifications = parsedQualifications;
-          payload.qualificationString = parsedQualifications.join(', ');
-          payload.consultationModes = ['video', 'in_person'];
+          const feeInRupees = Number(formData.feeRupees);
+          const feeInPaise = isNaN(feeInRupees) ? 50000 : Math.round(feeInRupees * 100);
+
+          const profilePayload = {
+            regNumber: `MCI-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`,
+            fee: feeInPaise,
+            city: formData.city.trim(),
+            specialisations: [formData.specialisation],
+            consultationModes: ['video', 'in_person'],
+            qualifications: parsedQualifications.map((deg) => ({
+              degree: deg,
+              institute: 'Verified Medical Institute',
+              year: 2020,
+            })),
+          };
+
+          const profileRes = await api.post('/doctors/profile', profilePayload);
+          if (profileRes.data?.user) {
+            finalUser = profileRes.data.user;
+            setUser(finalUser);
+          }
         }
 
-        const res = await register(payload);
-        const registeredUser = res?.user;
-        const activeRole = registeredUser?.role || role;
-
+        const activeRole = finalUser?.role || role;
         if (redirectPath) {
           navigate(redirectPath, { replace: true });
         } else if (activeRole === 'doctor') {
-          navigate('/doctor/dashboard', { replace: true });
+          navigate('/doctor/schedule', { replace: true });
         } else {
           navigate('/patient/dashboard', { replace: true });
         }
@@ -315,14 +321,15 @@ const Login = () => {
         err.response?.data?.error ||
         (mode === 'login'
           ? 'Incorrect email or password. Please try again.'
-          : 'Could not create your account. This email may already be in use.');
+          : 'Could not complete registration. Please check your details and try again.');
       setErrorMsg(backendMsg);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const activeInfo = ROLE_HIGHLIGHTS[role] || ROLE_HIGHLIGHTS.patient;
+  const activeInfo =
+    mode === 'login' ? LOGIN_HIGHLIGHT : ROLE_HIGHLIGHTS[role] || ROLE_HIGHLIGHTS.patient;
   const RoleIcon = activeInfo.icon;
 
   return (
@@ -338,14 +345,12 @@ const Login = () => {
         transition={{ duration: 0.36, ease: [0.22, 1, 0.36, 1] }}
         className="auth-split-container"
       >
-        {/* =================================================================
-            LEFT COLUMN: WARM, HUMAN-FIRST OVERVIEW
-            ================================================================= */}
+        {/* LEFT COLUMN */}
         <div className="auth-editorial-pane">
           <div>
             <AnimatePresence mode="wait">
               <motion.div
-                key={role}
+                key={mode === 'login' ? 'login' : role}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
@@ -454,18 +459,16 @@ const Login = () => {
           </div>
         </div>
 
-        {/* =================================================================
-            RIGHT COLUMN: SMOOTH MORPHING FORM PANE
-            ================================================================= */}
+        {/* RIGHT COLUMN */}
         <div className="auth-form-pane">
-          {/* 1. Top Segmented Mode Switcher: Sign In | Create Account */}
+          {/* 1. Mode Switcher */}
           <div
             className="auth-segmented-track"
             style={{
               gridTemplateColumns: '1fr 1fr',
               maxWidth: '300px',
               width: '100%',
-              margin: '0 auto 20px auto',
+              margin: '0 auto 24px auto',
             }}
           >
             <button
@@ -499,37 +502,44 @@ const Login = () => {
             </button>
           </div>
 
-          {/* 2. Role Selector Pill: Patient | Doctor | Admin */}
-          <div
-            className="auth-segmented-track"
-            style={{
-              gridTemplateColumns: mode === 'register' ? '1fr 1fr' : '1fr 1fr 1fr',
-              width: '100%',
-              marginBottom: '24px',
-            }}
-          >
-            {(['patient', 'doctor', ...(mode === 'login' ? ['admin'] : [])]).map((r) => {
-              const isSelected = role === r;
-              const label = r.charAt(0).toUpperCase() + r.slice(1);
-              return (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => handleRoleSwitch(r)}
-                  className={`auth-segment-btn ${isSelected ? 'active-frosted' : ''}`}
+          {/* 2. Role Selector (Only visible during Create Account) */}
+          <AnimatePresence initial={false}>
+            {mode === 'register' && (
+              <motion.div
+                initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                animate={{ opacity: 1, height: 'auto', marginBottom: 22 }}
+                exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                style={{ overflow: 'hidden' }}
+              >
+                <div
+                  className="auth-segmented-track"
+                  style={{ gridTemplateColumns: '1fr 1fr', width: '100%' }}
                 >
-                  {isSelected && (
-                    <motion.span
-                      layoutId="auth-role-pill"
-                      className="auth-segment-pill-glass"
-                      transition={{ type: 'spring', stiffness: 400, damping: 32 }}
-                    />
-                  )}
-                  <span>{label}</span>
-                </button>
-              );
-            })}
-          </div>
+                  {['patient', 'doctor'].map((r) => {
+                    const isSelected = role === r;
+                    const label = r === 'doctor' ? 'Specialist / Doctor' : 'Patient';
+                    return (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => handleRoleSwitch(r)}
+                        className={`auth-segment-btn ${isSelected ? 'active-frosted' : ''}`}
+                      >
+                        {isSelected && (
+                          <motion.span
+                            layoutId="auth-role-pill"
+                            className="auth-segment-pill-glass"
+                            transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+                          />
+                        )}
+                        <span>{label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Error Banner */}
           <AnimatePresence initial={false}>
@@ -558,10 +568,10 @@ const Login = () => {
             )}
           </AnimatePresence>
 
-          {/* 3. Smooth Cross-Fading Form Content */}
+          {/* 3. Main Form */}
           <AnimatePresence mode="wait" initial={false}>
             <motion.form
-              key={`${mode}-${role}`}
+              key={`${mode}-${mode === 'register' ? role : 'unified'}`}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
@@ -569,15 +579,8 @@ const Login = () => {
               onSubmit={handleSubmit}
               style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}
             >
-              {/* Registration Fields: Generic Placeholders Only */}
               {mode === 'register' && (
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: '12px',
-                  }}
-                >
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div className="auth-input-group">
                     <label className="auth-input-label">
                       {role === 'doctor' ? 'Doctor Name' : 'Full Name'}
@@ -599,7 +602,7 @@ const Login = () => {
                       type="tel"
                       name="phone"
                       required
-                      placeholder="e.g. +91 98765 43210"
+                      placeholder="e.g. 9876543210"
                       value={formData.phone}
                       onChange={handleChange}
                       className="auth-input-field"
@@ -608,7 +611,6 @@ const Login = () => {
                 </div>
               )}
 
-              {/* Email Input */}
               <div className="auth-input-group">
                 <label className="auth-input-label">Email Address</label>
                 <input
@@ -622,16 +624,15 @@ const Login = () => {
                 />
               </div>
 
-              {/* Password Input */}
               <div className="auth-input-group">
-                <label className="auth-input-label">Password</label>
+                <label className="auth-input-label">Password (min 8 characters)</label>
                 <div style={{ position: 'relative' }}>
                   <input
                     type={showPassword ? 'text' : 'password'}
                     name="password"
                     required
-                    minLength={6}
-                    placeholder="Enter at least 6 characters"
+                    minLength={8}
+                    placeholder="Enter at least 8 characters"
                     value={formData.password}
                     onChange={handleChange}
                     className="auth-input-field"
@@ -652,14 +653,13 @@ const Login = () => {
                       display: 'flex',
                       alignItems: 'center',
                     }}
-                    title={showPassword ? 'Hide password' : 'Show password'}
                   >
                     {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
                   </button>
                 </div>
               </div>
 
-              {/* Doctor Registration Fields */}
+              {/* Clean 2x2 Doctor Registration Fields (No Cluttered Institute/Year Inputs!) */}
               {mode === 'register' && role === 'doctor' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 0.85fr', gap: '12px' }}>
@@ -687,25 +687,17 @@ const Login = () => {
                     </div>
                   </div>
 
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: '0.9fr 1.1fr',
-                      gap: '12px',
-                      alignItems: 'start',
-                    }}
-                  >
-                    {/* Custom Matte Glass Consultation Fee Stepper */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '0.9fr 1.1fr', gap: '12px', alignItems: 'start' }}>
                     <div className="auth-input-group">
                       <label className="auth-input-label">Consultation Fee (₹)</label>
                       <div style={{ position: 'relative' }}>
                         <input
                           type="number"
-                          name="fee"
+                          name="feeRupees"
                           required
-                          min="100"
+                          min="0"
                           placeholder="e.g. 500"
-                          value={formData.fee}
+                          value={formData.feeRupees}
                           onChange={handleChange}
                           className="auth-input-field"
                           style={{ paddingRight: '72px' }}
@@ -715,7 +707,6 @@ const Login = () => {
                             type="button"
                             onClick={() => handleFeeStep(-50)}
                             className="fee-step-btn"
-                            title="Decrease by ₹50"
                           >
                             <Minus size={13} />
                           </button>
@@ -723,7 +714,6 @@ const Login = () => {
                             type="button"
                             onClick={() => handleFeeStep(50)}
                             className="fee-step-btn"
-                            title="Increase by ₹50"
                           >
                             <Plus size={13} />
                           </button>
@@ -731,7 +721,6 @@ const Login = () => {
                       </div>
                     </div>
 
-                    {/* Comma-Separated Qualifications Input with Live Tag Preview */}
                     <div className="auth-input-group">
                       <label className="auth-input-label">
                         Qualifications (separate with comma)
@@ -745,8 +734,6 @@ const Login = () => {
                         onChange={handleChange}
                         className="auth-input-field"
                       />
-
-                      {/* Live Visual Pills Showing Each Separated Qualification */}
                       {parsedQualifications.length > 0 && (
                         <div className="qualification-tags-row">
                           {parsedQualifications.map((deg, idx) => (
@@ -762,7 +749,6 @@ const Login = () => {
                 </div>
               )}
 
-              {/* Bottom Helper Row */}
               <div
                 style={{
                   display: 'flex',
@@ -822,7 +808,6 @@ const Login = () => {
                 )}
               </div>
 
-              {/* Submit Button */}
               <button
                 type="submit"
                 disabled={submitting}

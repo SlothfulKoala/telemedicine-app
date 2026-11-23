@@ -49,8 +49,8 @@ export const AuthProvider = ({ children }) => {
     checkUserSession();
   }, []);
 
-  const login = async (email, password, role) => {
-    const res = await api.post('/auth/login', { email, password, role });
+  const login = async (email, password) => {
+    const res = await api.post('/auth/login', { email, password });
     if (res.data?.user) {
       localStorage.setItem(SESSION_FLAG_KEY, 'true');
       setUser(res.data.user);

@@ -1,13 +1,18 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation, Link } from 'react-router-dom';
 import { AnimatePresence, motion, useMotionValue, useSpring } from 'framer-motion';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider } from '././context/AuthContext';
 import Navbar from './components/Navbar';
 import Landing from './pages/Landing';
 import Footer from './components/Footer';
 import Specialties from './pages/Specialties';
 import SecurityPrivacy from './pages/SecurityPrivacy';
 import Login from './pages/Login';
+import DoctorSearch from './pages/patient/DoctorSearch';
+import BookingCheckout from './pages/patient/BookingCheckout';
+import PatientDashboard from './pages/patient/PatientDashboard';
+import DoctorDashboard from './pages/doctor/DoctorDashboard';
+import ScheduleBuilder from './pages/doctor/ScheduleBuilder';
 
 const AnimatedPreviewPage = ({ title, subtitle, primaryActionText, primaryActionLink }) => (
   <motion.main
@@ -58,6 +63,8 @@ const AnimatedRoutes = () => {
         <Route path="/security" element={<SecurityPrivacy />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Login />} />
+        <Route path="/search" element={<DoctorSearch />} />
+        <Route path="/patient/checkout/:doctorId" element={<BookingCheckout />} />
         <Route
           path="/search"
           element={
@@ -102,6 +109,23 @@ const AnimatedRoutes = () => {
             />
           }
         />
+        <Route path="/" element={<Landing />} />
+        <Route path="/specialties" element={<Specialties />} />
+        <Route path="/security" element={<SecurityPrivacy />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Login />} />
+
+        {/* Patient Routes (pages/patient/) */}
+        <Route path="/search" element={<DoctorSearch />} />
+        <Route path="/patient/checkout/:doctorId" element={<BookingCheckout />} />
+        <Route path="/patient/dashboard" element={<PatientDashboard />} />
+        <Route path="/patient/appointments" element={<PatientDashboard />} />
+        <Route path="/vault" element={<PatientDashboard />} />
+
+        {/* Doctor Routes (pages/doctor/) */}
+        <Route path="/doctor/dashboard" element={<DoctorDashboard />} />
+        <Route path="/doctor/queue" element={<DoctorDashboard />} />
+        <Route path="/doctor/schedule" element={<ScheduleBuilder />} />
       </Routes>
     </AnimatePresence>
   );

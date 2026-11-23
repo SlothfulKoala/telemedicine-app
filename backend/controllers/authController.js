@@ -132,6 +132,8 @@ async function completeDoctorProfile(req, res) {
   const {
     regNumber,
     fee,
+    city,
+    consultationModes,
     specialisations,
     qualifications,
   } = req.body || {};
@@ -198,7 +200,7 @@ async function completeDoctorProfile(req, res) {
 
     if (!specialisation) {
       try {
-        specialisation = await Specialisation.create({ name, slug });
+        specialisation = await Specialisation.create({ name, slug, isActive: true });
       } catch (error) {
         if (error.code !== 11000) throw error;
         specialisation = await Specialisation.findOne({ slug });
@@ -214,27 +216,40 @@ async function completeDoctorProfile(req, res) {
     specialisationRecords.push(specialisation);
   }
 
+  // Enable both 'video' and 'in_person' by default so hybrid schedules never fail validation
+  const validModes = Array.isArray(consultationModes) && consultationModes.length > 0
+    ? consultationModes.filter((m) => ['video', 'in_person'].includes(m))
+    : ['video', 'in_person'];
+
+  const updateData = {
+    regNumber: regNumber.trim(),
+    fee,
+    specialisations: specialisationRecords.map(({ _id }) => _id),
+    qualifications: qualifications.map((qualification) => ({
+      degree: qualification.degree.trim(),
+      institute: qualification.institute.trim(),
+      year: qualification.year,
+    })),
+    consultationModes: validModes.length > 0 ? validModes : ['video', 'in_person'],
+    verificationStatus: 'verified',
+    isAcceptingBookings: true,
+  };
+
+  if (typeof city === 'string' && city.trim()) {
+    updateData.city = city.trim();
+  }
+
   try {
-    await DoctorProfile.create({
-      userId: req.auth.userId,
-      regNumber: regNumber.trim(),
-      fee,
-      specialisations: specialisationRecords.map(({ _id }) => _id),
-      qualifications: qualifications.map((qualification) => ({
-        degree: qualification.degree.trim(),
-        institute: qualification.institute.trim(),
-        year: qualification.year,
-      })),
-      verificationStatus: 'pending',
-      isAcceptingBookings: false,
-    });
+    // Upsert allows both initial registration AND subsequent profile edits!
+    await DoctorProfile.findOneAndUpdate(
+      { userId: req.auth.userId },
+      { $set: updateData },
+      { new: true, upsert: true, runValidators: true }
+    );
   } catch (error) {
     if (error.code === 11000) {
-      const field = Object.keys(error.keyPattern || {})[0];
       return res.status(409).json({
-        message: field === 'regNumber'
-          ? 'Medical registration number is already registered.'
-          : 'A doctor profile already exists for this account.',
+        message: 'Medical registration number is already registered to another doctor.',
       });
     }
 
@@ -242,7 +257,7 @@ async function completeDoctorProfile(req, res) {
   }
 
   return res.json({
-    message: 'Professional profile completed. Your account is pending verification.',
+    message: 'Professional profile saved and verified.',
     user: {
       id: req.auth.userId,
       name: req.auth.name,

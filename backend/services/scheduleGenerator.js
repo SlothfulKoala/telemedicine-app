@@ -101,6 +101,33 @@ function buildSlotsForRule(rule, timeZone, now, advanceBookingDays, timeOffs = [
 
   const firstDay = getLocalDateString(now, timeZone);
   const generated = [];
+  const hasCustomSlots = Array.isArray(rule.customSlots) && rule.customSlots.length > 0;
+  const breakMins = Number.isInteger(rule.breakMins) && rule.breakMins >= 0 ? rule.breakMins : 0;
+  const fallbackMode = rule.mode === 'in_person' ? 'in_person' : 'video';
+
+  const pushIfBookable = (dateString, slotStartMins, slotEndMins, slotMode) => {
+    const startAt = localDateTimeToUTC(dateString, slotStartMins, timeZone);
+    const endAt = localDateTimeToUTC(dateString, slotEndMins, timeZone);
+
+    if (!startAt || !endAt || startAt < now || endAt <= startAt) return;
+    if (rule.effectiveFrom && startAt < new Date(rule.effectiveFrom)) return;
+    if (rule.effectiveTo && startAt >= new Date(rule.effectiveTo)) return;
+    if (timeOffs.some((timeOff) =>
+      startAt < new Date(timeOff.endAt) &&
+      endAt > new Date(timeOff.startAt)
+    )) {
+      return;
+    }
+
+    generated.push({
+      doctorId: rule.doctorId,
+      startAt,
+      endAt,
+      status: 'open',
+      mode: slotMode === 'in_person' ? 'in_person' : 'video',
+      ruleId: rule._id,
+    });
+  };
 
   for (let dayOffset = 0; dayOffset < advanceBookingDays; dayOffset += 1) {
     const dateString = addLocalDays(firstDay, dayOffset);
@@ -109,32 +136,24 @@ function buildSlotsForRule(rule, timeZone, now, advanceBookingDays, timeOffs = [
       continue;
     }
 
-    for (
-      let start = startMinute;
-      start + rule.slotMins <= endMinute;
-      start += rule.slotMins
-    ) {
-      const startAt = localDateTimeToUTC(dateString, start, timeZone);
-      const endAt = localDateTimeToUTC(dateString, start + rule.slotMins, timeZone);
-
-      if (!startAt || !endAt || startAt < now || endAt <= startAt) continue;
-      if (rule.effectiveFrom && startAt < new Date(rule.effectiveFrom)) continue;
-      if (rule.effectiveTo && startAt >= new Date(rule.effectiveTo)) continue;
-      if (timeOffs.some((timeOff) =>
-        startAt < new Date(timeOff.endAt) &&
-        endAt > new Date(timeOff.startAt)
-      )) {
-        continue;
+    if (hasCustomSlots) {
+      // Path A: Generate exact slots from the doctor's custom timeline (skipping Break / Off slots)
+      for (const slot of rule.customSlots) {
+        if (slot.active === false) continue;
+        const sStart = parseTime(slot.startTime);
+        const sEnd = parseTime(slot.endTime);
+        if (sStart === null || sEnd === null || sEnd <= sStart) continue;
+        pushIfBookable(dateString, sStart, sEnd, slot.mode || fallbackMode);
       }
-
-      generated.push({
-        doctorId: rule.doctorId,
-        startAt,
-        endAt,
-        status: 'open',
-        mode: rule.mode,
-        ruleId: rule._id,
-      });
+    } else {
+      // Path B: Standard contiguous/buffered generation using slotMins + breakMins
+      for (
+        let start = startMinute;
+        start + rule.slotMins <= endMinute;
+        start += rule.slotMins + breakMins
+      ) {
+        pushIfBookable(dateString, start, start + rule.slotMins, fallbackMode);
+      }
     }
   }
 
