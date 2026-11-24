@@ -1,12 +1,19 @@
 // backend/routes/doctorRoutes.js
 const express = require('express');
 const router = express.Router();
-const doctorController = require('../controllers/doctorController');
+const { searchDoctors } = require('../controllers/doctorController');
+const { completeDoctorProfile } = require('../controllers/authController');
+const { authenticate, requireRole } = require('../middleware/authMiddleware');
 
-// Search for doctors: GET /api/doctors/search
-router.get('/search', doctorController.searchDoctors);
+const asyncHandler = (handler) => (req, res, next) =>
+  Promise.resolve(handler(req, res, next)).catch(next);
 
-// Create a doctor (for testing): POST /api/doctors/profile
-router.post('/profile', doctorController.createProfile);
+router.get('/search', asyncHandler(searchDoctors));
+router.post(
+  '/profile',
+  authenticate,
+  requireRole('doctor'),
+  asyncHandler(completeDoctorProfile)
+);
 
 module.exports = router;

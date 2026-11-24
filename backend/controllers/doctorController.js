@@ -1,52 +1,57 @@
-// backend/controllers/doctorController.js
-// 1. Use curly braces to extract exactly what you need from the barrel file
-const { DoctorProfile, Specialisation } = require('../models'); 
+const { DoctorProfile, Specialisation } = require('../models');
 
-// The Search API (GET)
-exports.searchDoctors = async (req, res) => {
-  try {
-    const { specialisation, city } = req.query;
-    const filter = {};
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
-    // 2. City is still a string in the new schema, so regex works perfectly here
-    if (city) {
-      filter.city = { $regex: city, $options: 'i' };
+async function searchDoctors(req, res) {
+  const { specialisation, city } = req.query;
+
+  if (
+    (specialisation !== undefined && typeof specialisation !== 'string') ||
+    (city !== undefined && typeof city !== 'string')
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: 'Specialisation and city filters must be strings.',
+    });
+  }
+
+  // Allow both 'verified' and newly registered 'pending' doctors to appear in search
+  // (only excluding explicitly 'rejected' profiles or doctors who paused bookings)
+  const filter = {
+    verificationStatus: { $ne: 'rejected' },
+    isAcceptingBookings: { $ne: false },
+  };
+
+  if (city?.trim()) {
+    filter.city = { $regex: escapeRegex(city.trim()), $options: 'i' };
+  }
+
+  if (specialisation?.trim()) {
+    const specialisationRecord = await Specialisation.findOne({
+      name: { $regex: escapeRegex(specialisation.trim()), $options: 'i' },
+      isActive: true,
+    });
+
+    if (!specialisationRecord) {
+      return res.status(200).json({ success: true, count: 0, data: [] });
     }
 
-    // 3. Specialisations are now linked ObjectIds, so we must look up the ID first
-    if (specialisation) {
-      // Find the specialisation document that matches the search text
-      const specDoc = await Specialisation.findOne({ 
-        name: { $regex: specialisation, $options: 'i' } 
-      });
-      
-      if (specDoc) {
-        // If found, filter doctors who have this specialisation ID in their array
-        filter.specialisations = specDoc._id;
-      } else {
-        // If the specialisation doesn't exist at all, return an empty array immediately
-        return res.status(200).json({ success: true, count: 0, data: [] });
-      }
-    }
-
-    // 4. Run the search. Populate the user info AND the specialisation names!
-    const doctors = await DoctorProfile.find(filter)
-      .populate('userId', 'name email')
-      .populate('specialisations', 'name');
-
-    res.status(200).json({ success: true, count: doctors.length, data: doctors });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    filter.specialisations = specialisationRecord._id;
   }
-};
 
-// Temporary Create API (POST)
-exports.createProfile = async (req, res) => {
-  try {
-    const newProfile = new DoctorProfile(req.body);
-    await newProfile.save();
-    res.status(201).json({ success: true, data: newProfile });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
+  const results = await DoctorProfile.find(filter)
+    .populate({
+      path: 'userId',
+      select: 'name email',
+      match: { isActive: { $ne: false } },
+    })
+    .populate('specialisations', 'name');
+
+  const doctors = results.filter((doctor) => doctor.userId);
+
+  return res.json({ success: true, count: doctors.length, data: doctors });
+}
+
+module.exports = { searchDoctors };

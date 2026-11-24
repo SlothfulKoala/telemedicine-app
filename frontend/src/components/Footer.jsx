@@ -1,10 +1,143 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 const Footer = () => {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const role = user?.role || 'guest';
+
+  const handleSignOut = async () => {
+    try {
+      if (typeof logout === 'function') {
+        await logout();
+      }
+    } finally {
+      navigate('/');
+    }
+  };
+
+  const brandHomeRoute =
+    role === 'doctor'
+      ? '/doctor/dashboard'
+      : role === 'patient'
+      ? '/patient/dashboard'
+      : role === 'admin'
+      ? '/admin/dashboard'
+      : '/';
+
+  const roleConfig = {
+    guest: {
+      headingLead: 'Ready for healthcare that',
+      headingMuted: 'feels effortless?',
+      subtext:
+        'Connect with verified specialists, book your consultation slot in real time, and manage your medical records in one calm, private space.',
+      primaryCta: { label: 'Book a Consult', to: '/search' },
+      secondaryCta: {
+        label: 'Join as a Specialist',
+        to: '/login?mode=register&role=doctor',
+      },
+      columns: [
+        {
+          title: 'Get Started',
+          links: [
+            { label: 'Sign In', to: '/login?mode=login' },
+            { label: 'Patient Sign Up', to: '/login?mode=register&role=patient' },
+          ],
+        },
+        {
+          title: 'Legal',
+          links: [
+            { label: 'Privacy & Security', href: '#privacy' },
+            { label: 'Terms of Care', href: '#terms' },
+          ],
+        },
+      ],
+    },
+
+    patient: {
+      headingLead: 'Need a follow-up or',
+      headingMuted: 'a new consultation?',
+      subtext:
+        'Browse verified specialists with open slots this week, review your upcoming visits, or access your encrypted prescriptions anytime.',
+      primaryCta: { label: 'Find a Specialist', to: '/search' },
+      secondaryCta: null,
+      columns: [
+        {
+          title: 'Your Care',
+          links: [
+            { label: 'My Appointments', to: '/patient/dashboard' },
+            { label: 'Video Room', to: '/video' },
+            { label: 'Health Vault', to: '/vault' },
+          ],
+        },
+        {
+          title: 'Account',
+          links: [
+            { label: 'Privacy & Security', href: '#privacy' },
+            { label: 'Terms of Care', href: '#terms' },
+            { label: 'Sign Out', action: handleSignOut },
+          ],
+        },
+      ],
+    },
+
+    doctor: {
+      headingLead: 'Run your clinical schedule',
+      headingMuted: 'with complete clarity.',
+      subtext:
+        'Adjust your weekly working hours, customize rest buffers between slots, and manage your active patient queue from one calm workspace.',
+      primaryCta: { label: 'Schedule Builder', to: '/doctor/schedule' },
+      secondaryCta: null,
+      columns: [
+        {
+          title: 'Workspace',
+          links: [
+            { label: 'Clinical Console', to: '/doctor/dashboard' },
+            { label: 'Video Room', to: '/video' },
+          ],
+        },
+        {
+          title: 'Account',
+          links: [
+            { label: 'Privacy & Security', href: '#privacy' },
+            { label: 'Terms of Care', href: '#terms' },
+            { label: 'Sign Out', action: handleSignOut },
+          ],
+        },
+      ],
+    },
+
+    admin: {
+      headingLead: 'Platform governance &',
+      headingMuted: 'specialist oversight.',
+      subtext:
+        'Verify specialist credentials, monitor platform health, and maintain secure clinical standards across Vitalise.',
+      primaryCta: { label: 'Admin Console', to: '/admin/dashboard' },
+      secondaryCta: null,
+      columns: [
+        {
+          title: 'Platform',
+          links: [{ label: 'Specialist Directory', to: '/search' }],
+        },
+        {
+          title: 'Account',
+          links: [
+            { label: 'Privacy & Security', href: '#privacy' },
+            { label: 'Terms of Care', href: '#terms' },
+            { label: 'Sign Out', action: handleSignOut },
+          ],
+        },
+      ],
+    },
+  };
+
+  const activeConfig = roleConfig[role] || roleConfig.guest;
+
   return (
     <footer className="vitalise-footer">
-      {/* --- Subtle SVG Fractal Noise Overlay (Preserved from your snippet) --- */}
+      {/* Subtle SVG Fractal Noise Overlay */}
       <div
         style={{
           position: 'absolute',
@@ -17,7 +150,7 @@ const Footer = () => {
         }}
       />
 
-      {/* --- Soft Slate-Blue & Warm Cream Ambient Refraction Orbs (Zero Neon) --- */}
+      {/* Ambient Refraction Orbs */}
       <div
         style={{
           position: 'absolute',
@@ -61,9 +194,9 @@ const Footer = () => {
         }}
       />
 
-      {/* --- Main Content Layer --- */}
+      {/* Main Content Layer */}
       <div className="vitalise-footer-container">
-        {/* Top CTA Section */}
+        {/* Top Role-Aware CTA Section */}
         <div className="vitalise-footer-top">
           <div>
             <h2
@@ -73,10 +206,10 @@ const Footer = () => {
                 marginBottom: '14px',
               }}
             >
-              Ready for healthcare that{' '}
+              {activeConfig.headingLead}{' '}
               <span style={{ color: 'rgba(243, 239, 230, 0.52)' }}>
                 <br />
-                feels effortless?
+                {activeConfig.headingMuted}
               </span>
             </h2>
             <p
@@ -87,41 +220,40 @@ const Footer = () => {
                 maxWidth: '460px',
               }}
             >
-              Connect with verified specialists, lock your consultation slot in
-              real time, and manage your medical records in one calm, private
-              space.
+              {activeConfig.subtext}
             </p>
           </div>
 
-          {/* Interactive Action Buttons with Diagonal Arrow Cycle */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px' }}>
-            <Link to="/search" className="btn-cream-pill">
-              <span>Book a Consult</span>
-              <span className="arrow-cycle-box">
-                <span className="arrow-icon-primary">↗</span>
-                <span className="arrow-icon-clone">↗</span>
-              </span>
-            </Link>
+            {activeConfig.primaryCta && (
+              <Link to={activeConfig.primaryCta.to} className="btn-cream-pill">
+                <span>{activeConfig.primaryCta.label}</span>
+                <span className="arrow-cycle-box">
+                  <span className="arrow-icon-primary">↗</span>
+                  <span className="arrow-icon-clone">↗</span>
+                </span>
+              </Link>
+            )}
 
-            <Link to="/login" className="btn-glass-pill">
-              <span>Join as a Specialist</span>
-              <span className="arrow-cycle-box">
-                <span className="arrow-icon-primary">↗</span>
-                <span className="arrow-icon-clone">↗</span>
-              </span>
-            </Link>
+            {activeConfig.secondaryCta && (
+              <Link to={activeConfig.secondaryCta.to} className="btn-glass-pill">
+                <span>{activeConfig.secondaryCta.label}</span>
+                <span className="arrow-cycle-box">
+                  <span className="arrow-icon-primary">↗</span>
+                  <span className="arrow-icon-clone">↗</span>
+                </span>
+              </Link>
+            )}
           </div>
         </div>
 
-        {/* Thin Glass Divider */}
         <div className="vitalise-footer-divider" />
 
-        {/* Middle Brand & Navigation Columns */}
+        {/* Middle Brand & Compact 2-Column Navigation */}
         <div className="vitalise-footer-middle">
-          {/* Left: Brand Identity */}
           <div style={{ maxWidth: '360px' }}>
             <Link
-              to="/"
+              to={brandHomeRoute}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -176,56 +308,63 @@ const Footer = () => {
             </p>
           </div>
 
-          {/* Right: 3-Column Site Navigation */}
-          <div className="vitalise-footer-links-grid">
-            <div className="vitalise-footer-col">
-              <h4 className="vitalise-footer-col-title">For Patients</h4>
-              <Link to="/search" className="vitalise-footer-link">
-                Find Doctors
-              </Link>
-              <Link to="/video" className="vitalise-footer-link">
-                Video Consultations
-              </Link>
-              <Link to="/patient/dashboard" className="vitalise-footer-link">
-                Patient Dashboard
-              </Link>
-              <Link to="/vault" className="vitalise-footer-link">
-                Health Records Vault
-              </Link>
-            </div>
-
-            <div className="vitalise-footer-col">
-              <h4 className="vitalise-footer-col-title">For Specialists</h4>
-              <Link to="/doctor/dashboard" className="vitalise-footer-link">
-                Clinical Console
-              </Link>
-              <Link to="/doctor/schedule" className="vitalise-footer-link">
-                Schedule Builder
-              </Link>
-              <Link to="/login" className="vitalise-footer-link">
-                Specialist Portal
-              </Link>
-            </div>
-
-            <div className="vitalise-footer-col">
-              <h4 className="vitalise-footer-col-title">Account & Support</h4>
-              <Link to="/login" className="vitalise-footer-link">
-                Sign In / Register
-              </Link>
-              <Link to="/search" className="vitalise-footer-link">
-                Browse Specialties
-              </Link>
-              <a href="#privacy" className="vitalise-footer-link">
-                Privacy & Security
-              </a>
-              <a href="#terms" className="vitalise-footer-link">
-                Terms of Care
-              </a>
-            </div>
+          <div
+            className="vitalise-footer-links-grid"
+            style={{
+              gridTemplateColumns: 'repeat(2, minmax(140px, auto))',
+              gap: '56px',
+            }}
+          >
+            {activeConfig.columns.map((col) => (
+              <div key={col.title} className="vitalise-footer-col">
+                <h4 className="vitalise-footer-col-title">{col.title}</h4>
+                {col.links.map((item) => {
+                  if (item.action) {
+                    return (
+                      <button
+                        key={item.label}
+                        type="button"
+                        onClick={item.action}
+                        className="vitalise-footer-link"
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          padding: 0,
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          font: 'inherit',
+                        }}
+                      >
+                        {item.label}
+                      </button>
+                    );
+                  }
+                  if (item.href) {
+                    return (
+                      <a
+                        key={item.label}
+                        href={item.href}
+                        className="vitalise-footer-link"
+                      >
+                        {item.label}
+                      </a>
+                    );
+                  }
+                  return (
+                    <Link
+                      key={item.label}
+                      to={item.to}
+                      className="vitalise-footer-link"
+                    >
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* Thin Glass Divider */}
         <div className="vitalise-footer-divider" />
 
         {/* Bottom Copyright & Status Row */}
@@ -241,7 +380,11 @@ const Footer = () => {
                 backgroundColor: '#84b59f',
               }}
             />
-            <span>All consultation & booking services operational</span>
+            <span>
+              {user?.name
+                ? `Signed in as ${user.name} (${role})`
+                : 'All consultation & booking services operational'}
+            </span>
           </div>
         </div>
       </div>
