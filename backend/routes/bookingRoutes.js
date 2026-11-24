@@ -2,11 +2,13 @@
 const express = require('express');
 const router = express.Router();
 
-const { 
-  getAvailableSlots, 
-  holdSlot, 
-  confirmBooking, 
+const {
+  getAvailableSlots,
+  holdSlot,
+  confirmBooking,
   getPatientAppointments,
+  updatePatientAppointmentNote,
+  getPatientPrescription,
   cancelPatientAppointment,
   getDoctorAppointments,
   getCompletedDoctorAppointments,
@@ -32,6 +34,18 @@ router.get(
   authenticate,
   requireRole('patient'),
   asyncHandler(getPatientAppointments)
+);
+router.patch(
+  '/patient/appointments/:appointmentId/note',
+  authenticate,
+  requireRole('patient'),
+  asyncHandler(updatePatientAppointmentNote)
+);
+router.get(
+  '/patient/appointments/:appointmentId/prescription',
+  authenticate,
+  requireRole('patient'),
+  asyncHandler(getPatientPrescription)
 );
 router.post(
   '/patient/appointments/:appointmentId/cancel',

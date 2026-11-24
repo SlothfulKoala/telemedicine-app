@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Clock,
   Video,
   Building2,
   ArrowLeft,
@@ -14,6 +13,8 @@ import {
   Moon,
   ShieldCheck,
   Loader2,
+  MapPin,
+  ExternalLink,
 } from 'lucide-react';
 import { api, useAuth } from '../../context/AuthContext';
 
@@ -75,6 +76,9 @@ const formatFeeInRupees = (rawFee) => {
   return num >= 2000 ? Math.round(num / 100) : num;
 };
 
+const buildMapsUrl = (addressText) =>
+  `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addressText)}`;
+
 const BookingCheckout = () => {
   const { doctorId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -86,13 +90,13 @@ const BookingCheckout = () => {
   const [doctor, setDoctor] = useState(null);
   const [sevenDaySlots, setSevenDaySlots] = useState([]);
   const [selectedDateKey, setSelectedDateKey] = useState('');
+  const [dayModeFilter, setDayModeFilter] = useState('all'); // 'all' | 'video' | 'in_person'
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [reason, setReason] = useState('');
 
-  // Two-Step Anti-Slot-Hoarding Flow: 'select' (zero locks) -> 'review_hold' (15-min hold active) -> 'confirmed'
+  // Silent backend hold happens only when moving from 'select' -> 'review_hold' (no stressful UI timer!)
   const [checkoutStep, setCheckoutStep] = useState('select');
   const [heldAppointmentId, setHeldAppointmentId] = useState(null);
-  const [secondsLeft, setSecondsLeft] = useState(900);
 
   const [loading, setLoading] = useState(true);
   const [holding, setHolding] = useState(false);
@@ -106,21 +110,6 @@ const BookingCheckout = () => {
       navigate(`/login?mode=login&redirect=${encodeURIComponent(currentUrl)}`, { replace: true });
     }
   }, [user, doctorId, navigate]);
-
-  // Countdown runs ONLY when the patient has explicitly locked a slot in Step 2 ('review_hold')!
-  useEffect(() => {
-    if (checkoutStep !== 'review_hold') return;
-    const timer = setInterval(() => {
-      setSecondsLeft((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [checkoutStep]);
-
-  const formatTimer = (secs) => {
-    const mins = Math.floor(secs / 60);
-    const rem = secs % 60;
-    return `${String(mins).padStart(2, '0')}:${String(rem).padStart(2, '0')}`;
-  };
 
   useEffect(() => {
     let isMounted = true;
@@ -157,7 +146,6 @@ const BookingCheckout = () => {
           rawObjs = slotRes.value.data?.data || slotRes.value.data?.slots || [];
         }
 
-        // Keep ONLY open slots within the 7-day rolling window, parsed cleanly via startAt
         const validSlots = rawObjs
           .map((obj) => {
             const d = getSlotDateObj(obj);
@@ -206,7 +194,6 @@ const BookingCheckout = () => {
     };
   }, [doctorId, initialDateParam, user]);
 
-  // Available dates in the 7-day window (for the compact switcher)
   const availableDates = useMemo(() => {
     const map = new Map();
     sevenDaySlots.forEach((s) => {
@@ -222,42 +209,77 @@ const BookingCheckout = () => {
     return Array.from(map.values()).sort((a, b) => a.dateKey.localeCompare(b.dateKey));
   }, [sevenDaySlots]);
 
-  // Strictly ONLY the slots for the single selected date, grouped into Morning / Afternoon / Evening
+  const slotsOnSelectedDay = useMemo(
+    () => sevenDaySlots.filter((s) => s.dateKey === selectedDateKey),
+    [sevenDaySlots, selectedDateKey]
+  );
+
+  // Check if this specific day offers BOTH Video and In-Clinic slots
+  const dayHasBothModes = useMemo(() => {
+    let hasVideo = false;
+    let hasClinic = false;
+    slotsOnSelectedDay.forEach((s) => {
+      if (String(s.mode || 'video').toLowerCase().includes('person')) hasClinic = true;
+      else hasVideo = true;
+    });
+    return hasVideo && hasClinic;
+  }, [slotsOnSelectedDay]);
+
+  const filteredDaySlots = useMemo(() => {
+    if (dayModeFilter === 'all') return slotsOnSelectedDay;
+    return slotsOnSelectedDay.filter((s) => {
+      const isClinic = String(s.mode || 'video').toLowerCase().includes('person');
+      return dayModeFilter === 'in_person' ? isClinic : !isClinic;
+    });
+  }, [slotsOnSelectedDay, dayModeFilter]);
+
   const dayPeriods = useMemo(() => {
-    const onDay = sevenDaySlots.filter((s) => s.dateKey === selectedDateKey);
     return [
       {
         id: 'morning',
         label: 'Morning',
         icon: Sun,
-        slots: onDay.filter((s) => s.hour < 12),
+        slots: filteredDaySlots.filter((s) => s.hour < 12),
       },
       {
         id: 'afternoon',
         label: 'Afternoon',
         icon: Sunset,
-        slots: onDay.filter((s) => s.hour >= 12 && s.hour < 17),
+        slots: filteredDaySlots.filter((s) => s.hour >= 12 && s.hour < 17),
       },
       {
         id: 'evening',
         label: 'Evening',
         icon: Moon,
-        slots: onDay.filter((s) => s.hour >= 17),
+        slots: filteredDaySlots.filter((s) => s.hour >= 17),
       },
     ].filter((period) => period.slots.length > 0);
-  }, [sevenDaySlots, selectedDateKey]);
+  }, [filteredDaySlots]);
 
   const handleSwitchDay = (dateKey) => {
     setSelectedDateKey(dateKey);
+    setDayModeFilter('all');
     setErrorMsg('');
     setSearchParams({ date: dateKey }, { replace: true });
     const firstOnDay = sevenDaySlots.find((s) => s.dateKey === dateKey) || null;
     setSelectedSlot(firstOnDay);
   };
 
-  // STEP 1 -> STEP 2: Lock ONLY the single chosen slot when the patient clicks "Lock Slot & Review Booking"
-  const handleProceedToHoldAndReview = async (e) => {
-    e.preventDefault();
+  const handleSwitchDayModeFilter = (nextMode) => {
+    setDayModeFilter(nextMode);
+    const matching = slotsOnSelectedDay.filter((s) => {
+      if (nextMode === 'all') return true;
+      const isClinic = String(s.mode || 'video').toLowerCase().includes('person');
+      return nextMode === 'in_person' ? isClinic : !isClinic;
+    });
+    if (matching.length > 0 && !matching.some((s) => s._id === selectedSlot?._id)) {
+      setSelectedSlot(matching[0]);
+    }
+  };
+
+  // Silently hold the single chosen slot when patient clicks "Review Booking"
+  const handleProceedToReview = async (e) => {
+    if (e) e.preventDefault();
     setErrorMsg('');
 
     const slotId = selectedSlot?._id || selectedSlot?.id;
@@ -272,15 +294,6 @@ const BookingCheckout = () => {
       if (res.data?.appointmentId) {
         setHeldAppointmentId(res.data.appointmentId);
       }
-      if (res.data?.holdExpiresAt) {
-        const diffSecs = Math.max(
-          0,
-          Math.floor((new Date(res.data.holdExpiresAt).getTime() - Date.now()) / 1000)
-        );
-        setSecondsLeft(diffSecs > 0 ? diffSecs : 900);
-      } else {
-        setSecondsLeft(900);
-      }
       setCheckoutStep('review_hold');
     } catch (err) {
       setErrorMsg(
@@ -292,7 +305,6 @@ const BookingCheckout = () => {
     }
   };
 
-  // STEP 2 -> STEP 3: Final Confirm & Pay Later (or Payment Gateway in v2)
   const handleFinalConfirm = async () => {
     setErrorMsg('');
     const slotId = selectedSlot?._id || selectedSlot?.id;
@@ -318,7 +330,7 @@ const BookingCheckout = () => {
     } catch (err) {
       setErrorMsg(
         err.response?.data?.message ||
-          'Could not confirm this booking. Your 15-minute hold may have expired.'
+          'Could not confirm this booking. Please select an available slot again.'
       );
     } finally {
       setConfirming(false);
@@ -332,6 +344,7 @@ const BookingCheckout = () => {
     doctor?.specialisation ||
     'General Medicine';
   const docCity = doctor?.city || doctor?.location?.city || 'New Delhi';
+  const fullClinicAddress = [doctor?.clinicAddress, docCity].filter(Boolean).join(', ');
   const docFeeRupees = formatFeeInRupees(doctor?.fee);
   const selectedModeIsClinic = String(selectedSlot?.mode || 'video')
     .toLowerCase()
@@ -376,7 +389,7 @@ const BookingCheckout = () => {
               fontSize: '15.5px',
               color: 'var(--cream-soft)',
               lineHeight: 1.65,
-              marginBottom: '28px',
+              marginBottom: selectedModeIsClinic && fullClinicAddress ? '18px' : '28px',
             }}
           >
             Your{' '}
@@ -388,6 +401,51 @@ const BookingCheckout = () => {
             <strong style={{ color: '#ffffff' }}>{formatSlotTime(selectedSlot)}</strong> is
             confirmed (Payment: <strong style={{ color: '#d8f3e5' }}>{payStatus}</strong>).
           </p>
+
+          {selectedModeIsClinic && fullClinicAddress && (
+            <div
+              className="glass-widget-inner"
+              style={{
+                padding: '14px 18px',
+                marginBottom: '26px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px',
+                textAlign: 'left',
+                flexWrap: 'wrap',
+              }}
+            >
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '7px',
+                  fontSize: '13.5px',
+                  color: '#ffffff',
+                }}
+              >
+                <MapPin size={15} color="var(--cream)" />
+                <span>{fullClinicAddress}</span>
+              </span>
+              <a
+                href={buildMapsUrl(fullClinicAddress)}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  color: '#d8f3e5',
+                  fontSize: '13px',
+                  textDecoration: 'underline',
+                }}
+              >
+                <span>Open in Maps</span>
+                <ExternalLink size={12} />
+              </a>
+            </div>
+          )}
 
           <div style={{ display: 'flex', justifyContent: 'center', gap: '14px', flexWrap: 'wrap' }}>
             <Link to="/patient/dashboard" className="btn-cream-pill">
@@ -414,7 +472,7 @@ const BookingCheckout = () => {
       transition={{ duration: 0.35 }}
       className="search-page-container"
     >
-      {/* Top Bar: Calm Back Link + Hold Timer (Visible ONLY once patient enters Step 2!) */}
+      {/* Calm Top Navigation Bar (No Countdown Timer) */}
       <div
         style={{
           display: 'flex',
@@ -463,29 +521,26 @@ const BookingCheckout = () => {
           </Link>
         )}
 
-        {checkoutStep === 'review_hold' ? (
-          <div className="hold-timer-banner">
-            <Clock size={15} />
-            <span>Slot Reserved for You • {formatTimer(secondsLeft)} to confirm</span>
-          </div>
-        ) : (
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '6px 14px',
-              borderRadius: '999px',
-              background: 'rgba(255, 255, 255, 0.08)',
-              border: '1px solid rgba(255, 255, 255, 0.18)',
-              fontSize: '12px',
-              color: 'var(--cream-soft)',
-            }}
-          >
-            <ShieldCheck size={14} color="var(--cream)" />
-            <span>Step 2 of 3 • Pick a Time</span>
-          </div>
-        )}
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '6px 14px',
+            borderRadius: '999px',
+            background: 'rgba(255, 255, 255, 0.08)',
+            border: '1px solid rgba(255, 255, 255, 0.18)',
+            fontSize: '12px',
+            color: 'var(--cream-soft)',
+          }}
+        >
+          <ShieldCheck size={14} color="var(--cream)" />
+          <span>
+            {checkoutStep === 'review_hold'
+              ? 'Step 3 of 3 • Review & Confirm'
+              : 'Step 2 of 3 • Choose a Time'}
+          </span>
+        </div>
       </div>
 
       {loading ? (
@@ -496,7 +551,7 @@ const BookingCheckout = () => {
         </div>
       ) : (
         <div className="checkout-grid">
-          {/* LEFT PANE: Either Step 1 (Pick Time for Specific Day) OR Step 2 (Final Review & Confirm) */}
+          {/* LEFT PANE */}
           <div className="glass-card" style={{ padding: '34px' }}>
             <AnimatePresence mode="wait">
               {checkoutStep === 'select' ? (
@@ -505,7 +560,7 @@ const BookingCheckout = () => {
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -6 }}
-                  onSubmit={handleProceedToHoldAndReview}
+                  onSubmit={handleProceedToReview}
                 >
                   <h1
                     className="hero-display-title"
@@ -514,11 +569,11 @@ const BookingCheckout = () => {
                     Times for {formatDateFriendly(selectedDateKey)}.
                   </h1>
                   <p style={{ fontSize: '14.5px', color: 'var(--cream-soft)', marginBottom: '22px' }}>
-                    Choose a convenient time below. Your slot will be reserved when you click{' '}
-                    <strong style={{ color: '#ffffff' }}>Lock Slot & Review</strong>.
+                    Choose a convenient time below, then click{' '}
+                    <strong style={{ color: '#ffffff' }}>Review Booking</strong>.
                   </p>
 
-                  {/* Compact Day Switcher (Strictly shows 1 day's slots at a time!) */}
+                  {/* Compact Day Switcher */}
                   {availableDates.length > 1 && (
                     <div
                       style={{
@@ -527,7 +582,7 @@ const BookingCheckout = () => {
                         gap: '8px',
                         flexWrap: 'wrap',
                         paddingBottom: '18px',
-                        marginBottom: '22px',
+                        marginBottom: '20px',
                         borderBottom: '1px solid rgba(255, 255, 255, 0.12)',
                       }}
                     >
@@ -560,6 +615,40 @@ const BookingCheckout = () => {
                     </div>
                   )}
 
+                  {/* Quick Mode Filter (Shown automatically when a day offers BOTH Video & In-Clinic) */}
+                  {dayHasBothModes && (
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        marginBottom: '20px',
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <span style={{ fontSize: '12px', color: 'var(--cream-muted)' }}>
+                        Filter slots:
+                      </span>
+                      {[
+                        { id: 'all', label: 'All Slots' },
+                        { id: 'video', label: 'Video Only' },
+                        { id: 'in_person', label: 'In-Clinic Only' },
+                      ].map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => handleSwitchDayModeFilter(opt.id)}
+                          className={`time-slot-btn ${
+                            dayModeFilter === opt.id ? 'primary' : 'secondary'
+                          }`}
+                          style={{ padding: '5px 12px', fontSize: '12px' }}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
                   {errorMsg && (
                     <div
                       style={{
@@ -580,7 +669,7 @@ const BookingCheckout = () => {
                     </div>
                   )}
 
-                  {/* Single-Day Slots Calmly Grouped by Morning / Afternoon / Evening */}
+                  {/* Morning / Afternoon / Evening Slots with Explicit Video / In-Clinic Tags */}
                   {dayPeriods.length > 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '22px', marginBottom: '26px' }}>
                       {dayPeriods.map((period) => {
@@ -622,17 +711,38 @@ const BookingCheckout = () => {
                                     }}
                                     className={`time-slot-btn ${isSelected ? 'primary' : 'secondary'}`}
                                     style={{
-                                      padding: '9px 15px',
+                                      padding: '9px 14px',
                                       fontSize: '13px',
                                       display: 'inline-flex',
                                       alignItems: 'center',
-                                      gap: '7px',
+                                      gap: '8px',
                                     }}
-                                    title={isClinic ? 'In-Person Clinic Slot' : 'Video Consult Slot'}
                                   >
-                                    <span>{slotItem.formattedTime}</span>
-                                    <span style={{ opacity: 0.72, display: 'inline-flex' }}>
-                                      {isClinic ? <Building2 size={12} /> : <Video size={12} />}
+                                    <span style={{ fontWeight: 500 }}>
+                                      {slotItem.formattedTime}
+                                    </span>
+                                    <span
+                                      style={{
+                                        fontSize: '11px',
+                                        padding: '2px 7px',
+                                        borderRadius: '999px',
+                                        background: isSelected
+                                          ? 'rgba(14, 26, 20, 0.14)'
+                                          : isClinic
+                                          ? 'rgba(243, 239, 230, 0.12)'
+                                          : 'rgba(132, 181, 159, 0.18)',
+                                        color: isSelected
+                                          ? 'var(--ink-dark)'
+                                          : isClinic
+                                          ? 'var(--cream)'
+                                          : '#d8f3e5',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                      }}
+                                    >
+                                      {isClinic ? <Building2 size={10} /> : <Video size={10} />}
+                                      <span>{isClinic ? 'In-Clinic' : 'Video'}</span>
                                     </span>
                                   </button>
                                 );
@@ -653,8 +763,7 @@ const BookingCheckout = () => {
                         marginBottom: '24px',
                       }}
                     >
-                      No open slots left on {formatDateFriendly(selectedDateKey)}. Please choose
-                      another day above.
+                      No open slots match this filter on {formatDateFriendly(selectedDateKey)}.
                     </div>
                   )}
 
@@ -674,31 +783,13 @@ const BookingCheckout = () => {
                   </div>
                 </motion.form>
               ) : (
-                /* STEP 2: CALM FINAL REVIEW & PAYMENT/CONFIRMATION (HOLD ACTIVE!) */
+                /* STEP 2: CALM FINAL REVIEW & CONFIRM (NO TIMER PRESSURE) */
                 <motion.div
                   key="step-review"
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -6 }}
                 >
-                  <div
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '6px 13px',
-                      borderRadius: '999px',
-                      background: 'rgba(132, 181, 159, 0.18)',
-                      border: '1px solid rgba(132, 181, 159, 0.4)',
-                      color: '#d8f3e5',
-                      fontSize: '12px',
-                      marginBottom: '16px',
-                    }}
-                  >
-                    <ShieldCheck size={14} />
-                    <span>Step 3 of 3 • Slot Locked for {formatTimer(secondsLeft)}</span>
-                  </div>
-
                   <h1
                     className="hero-display-title"
                     style={{ fontSize: '2.15rem', marginBottom: '8px' }}
@@ -706,8 +797,7 @@ const BookingCheckout = () => {
                     Confirm your appointment.
                   </h1>
                   <p style={{ fontSize: '15px', color: 'var(--cream-soft)', marginBottom: '24px' }}>
-                    This time slot is now exclusively held for you. Review your details below and
-                    click confirm to finalize.
+                    Review your appointment details below and click confirm to finalize.
                   </p>
 
                   {errorMsg && (
@@ -736,7 +826,9 @@ const BookingCheckout = () => {
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14.5px' }}>
                       <span style={{ color: 'var(--cream-soft)' }}>Specialist</span>
-                      <span style={{ color: '#ffffff', fontWeight: 500 }}>{docName} ({docSpec})</span>
+                      <span style={{ color: '#ffffff', fontWeight: 500 }}>
+                        {docName} ({docSpec})
+                      </span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14.5px' }}>
                       <span style={{ color: 'var(--cream-soft)' }}>Date & Time</span>
@@ -750,6 +842,14 @@ const BookingCheckout = () => {
                         {selectedModeIsClinic ? 'In-Person Clinic Visit' : 'Online Video Consultation'}
                       </span>
                     </div>
+                    {selectedModeIsClinic && fullClinicAddress && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', fontSize: '14.5px' }}>
+                        <span style={{ color: 'var(--cream-soft)' }}>Clinic Location</span>
+                        <span style={{ color: '#ffffff', fontWeight: 500, textAlign: 'right' }}>
+                          {fullClinicAddress}
+                        </span>
+                      </div>
+                    )}
                     {reason.trim() && (
                       <div
                         style={{
@@ -759,7 +859,7 @@ const BookingCheckout = () => {
                           color: 'var(--cream-soft)',
                         }}
                       >
-                        <strong>Your Notes:</strong> “{reason.trim()}”
+                        <strong>Your Notes:</strong> {reason.trim()}
                       </div>
                     )}
                   </div>
@@ -768,7 +868,7 @@ const BookingCheckout = () => {
             </AnimatePresence>
           </div>
 
-          {/* RIGHT SUMMARY CARD (Sticky, Clear, Calm Action) */}
+          {/* RIGHT SUMMARY CARD */}
           <div className="glass-card" style={{ padding: '32px', height: 'fit-content' }}>
             <div
               style={{
@@ -819,6 +919,15 @@ const BookingCheckout = () => {
                   </span>
                 </div>
 
+                {selectedModeIsClinic && fullClinicAddress && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+                    <span style={{ color: 'var(--cream-soft)' }}>Clinic Address</span>
+                    <span style={{ color: '#ffffff', fontWeight: 500, textAlign: 'right' }}>
+                      {fullClinicAddress}
+                    </span>
+                  </div>
+                )}
+
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'var(--cream-soft)' }}>Payment</span>
                   <span style={{ color: '#d8f3e5', fontWeight: 500 }}>
@@ -847,7 +956,7 @@ const BookingCheckout = () => {
             {checkoutStep === 'select' ? (
               <button
                 type="button"
-                onClick={handleProceedToHoldAndReview}
+                onClick={handleProceedToReview}
                 disabled={holding || !selectedSlot}
                 className="btn-cream-pill"
                 style={{
@@ -860,11 +969,11 @@ const BookingCheckout = () => {
                 {holding ? (
                   <>
                     <Loader2 size={16} className="animate-spin" />
-                    <span>Reserving Slot...</span>
+                    <span>Preparing Review...</span>
                   </>
                 ) : (
                   <>
-                    <span>Lock Slot & Review Booking</span>
+                    <span>Review Booking</span>
                     <span className="arrow-cycle-box">
                       <span className="arrow-icon-primary">↗</span>
                       <span className="arrow-icon-clone">↗</span>
@@ -876,13 +985,13 @@ const BookingCheckout = () => {
               <button
                 type="button"
                 onClick={handleFinalConfirm}
-                disabled={confirming || secondsLeft === 0}
+                disabled={confirming}
                 className="btn-cream-pill btn-publish-success"
                 style={{
                   width: '100%',
                   justifyContent: 'center',
                   padding: '14px 24px',
-                  opacity: confirming || secondsLeft === 0 ? 0.65 : 1,
+                  opacity: confirming ? 0.65 : 1,
                 }}
               >
                 {confirming ? (

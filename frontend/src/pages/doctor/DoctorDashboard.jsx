@@ -440,7 +440,7 @@ const DoctorDashboard = () => {
                         {formatSlotDisplay(appt)}
                       </span>
                       {(appt.reason || appt.notes) && (
-                        <span>• Note: “{appt.reason || appt.notes}”</span>
+                        <span>• Note: {appt.reason || appt.notes}</span>
                       )}
                     </div>
                   </div>

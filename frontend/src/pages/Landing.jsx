@@ -15,6 +15,7 @@ import {
   Check,
   Award,
   Video,
+  Building2,
   CalendarHeart,
   FileCheck2,
   Stethoscope,
@@ -75,7 +76,7 @@ const PLATFORM_STORIES = [
     audienceBadge: 'EFFORTLESS SCHEDULING',
     title: 'Pick an open time slot and lock it instantly.',
     description:
-      'View live daily and weekly time slots generated directly from the doctor’s schedule. When you select a slot, it is held for you during checkout so no one else can take it.',
+      'View live daily and weekly time slots generated directly from the doctor’s schedule. When you review a booking, your slot is held for you so no one else can take it.',
     highlightStat: 'Protected Checkout Hold',
     highlightSub: 'Prevents overlapping appointments while you confirm',
     ctaText: 'Check Open Slots',
@@ -146,51 +147,69 @@ const shuffleDoctors = (array) => {
   return copy;
 };
 
-const formatSlotTime = (slotItem) => {
-  if (!slotItem) return '';
-  if (typeof slotItem === 'string') return slotItem;
-  if (slotItem.startTime) {
-    if (slotItem.startTime.includes('T')) {
-      const dateObj = new Date(slotItem.startTime);
-      if (!isNaN(dateObj.getTime())) {
-        return dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      }
-    }
-    return slotItem.startTime;
+const getSlotDateObj = (slot) => {
+  if (!slot || typeof slot !== 'object') return null;
+  const candidates = [slot.startAt, slot.date, slot.startTime];
+  for (const val of candidates) {
+    if (!val) continue;
+    const d = new Date(val);
+    if (!isNaN(d.getTime())) return d;
   }
-  if (slotItem.time) return slotItem.time;
-  return '';
+  return null;
 };
 
-const getConsultationModeLabel = (doc, openSlots) => {
-  const slotModes = new Set(
-    (openSlots || [])
-      .map((s) => (typeof s === 'object' ? s.mode || s.consultationMode : null))
-      .filter(Boolean)
+const toLocalDateKey = (dateObj) => {
+  const yyyy = dateObj.getFullYear();
+  const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const dd = String(dateObj.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+const formatFriendlyDay = (dateObj) => {
+  const now = new Date();
+  const todayKey = toLocalDateKey(now);
+  const tomorrowKey = toLocalDateKey(
+    new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
   );
+  const key = toLocalDateKey(dateObj);
+  const shortMonth = dateObj.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 
-  const rawDocModes =
-    doc.consultationModes ||
-    doc.modes ||
-    (doc.consultationMode ? [doc.consultationMode] : []) ||
-    (doc.mode ? (Array.isArray(doc.mode) ? doc.mode : [doc.mode]) : []);
+  if (key === todayKey) return `Today, ${shortMonth}`;
+  if (key === tomorrowKey) return `Tomorrow, ${shortMonth}`;
+  return dateObj.toLocaleDateString('en-IN', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  });
+};
 
-  rawDocModes.forEach((m) => slotModes.add(m));
+const groupSevenDayDates = (openSlots) => {
+  const now = new Date();
+  const weekEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7, 0, 0, 0, 0);
+  const map = new Map();
 
-  const normalized = Array.from(slotModes).map((m) => String(m).toLowerCase());
+  (openSlots || []).forEach((slot) => {
+    const d = getSlotDateObj(slot);
+    if (!d || d < now || d >= weekEnd) return;
 
-  const hasVideo = normalized.some((m) => m.includes('video') || m.includes('online') || m.includes('tele'));
-  const hasPhysical = normalized.some(
-    (m) => m.includes('person') || m.includes('clinic') || m.includes('physical') || m.includes('offline')
-  );
+    const dateKey = toLocalDateKey(d);
+    if (!map.has(dateKey)) {
+      map.set(dateKey, {
+        dateKey,
+        label: formatFriendlyDay(d),
+        count: 0,
+        hasVideo: false,
+        hasClinic: false,
+      });
+    }
+    const entry = map.get(dateKey);
+    entry.count += 1;
+    const m = String(slot.mode || 'video').toLowerCase();
+    if (m.includes('person') || m.includes('clinic')) entry.hasClinic = true;
+    else entry.hasVideo = true;
+  });
 
-  if (hasVideo && hasPhysical) return 'Video & In-Person';
-  if (hasPhysical) return 'In-Person Clinic';
-  if (hasVideo) return 'Video Consult';
-
-  if (doc.isVideoAvailable && doc.isInPersonAvailable) return 'Video & In-Person';
-  if (doc.isInPersonAvailable) return 'In-Person Clinic';
-  return 'Video Consult';
+  return Array.from(map.values()).sort((a, b) => a.dateKey.localeCompare(b.dateKey));
 };
 
 const Landing = () => {
@@ -204,7 +223,6 @@ const Landing = () => {
   const trackRef = useRef(null);
   const lastChapterRef = useRef(0);
 
-  // Smart Gate: If user is NOT logged in, route them to Login/Register with a redirect target
   const handleProtectedAction = useCallback(
     (targetPath) => {
       if (!user) {
@@ -255,7 +273,6 @@ const Landing = () => {
     window.scrollTo({ top: targetScroll, behavior: 'smooth' });
   }, []);
 
-  // Listen for Guest Navbar clicks ("Specialties" / "Security & Privacy")
   useEffect(() => {
     const onNavbarChapterJump = (e) => {
       if (typeof e.detail === 'number') {
@@ -266,7 +283,6 @@ const Landing = () => {
     return () => window.removeEventListener('vitalise:scroll-chapter', onNavbarChapterJump);
   }, [handleStoryClick]);
 
-  // 3D Tilt Physics for the Top-Right Hero Widget
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
   const tiltSpring = { stiffness: 180, damping: 24, mass: 0.6 };
@@ -306,11 +322,7 @@ const Landing = () => {
             const docId = doc._id || doc.id;
             let rawSlots = [];
 
-            if (Array.isArray(doc.availableSlots) && doc.availableSlots.length > 0) {
-              rawSlots = doc.availableSlots;
-            } else if (Array.isArray(doc.slots) && doc.slots.length > 0) {
-              rawSlots = doc.slots;
-            } else if (docId) {
+            if (docId) {
               try {
                 const slotRes = await api.get(`/booking/slots/${docId}`);
                 rawSlots =
@@ -323,18 +335,17 @@ const Landing = () => {
             }
 
             const openSlots = (rawSlots || []).filter((s) => {
-              if (!s) return false;
-              if (typeof s === 'string') return true;
+              if (!s || typeof s !== 'object') return false;
               const status = String(s.status || 'open').toLowerCase();
-              return status === 'open' || status === 'available' || s.isBooked === false;
+              return status === 'open' || status === 'available';
             });
 
-            if (openSlots.length === 0) return null;
+            const availableDates = groupSevenDayDates(openSlots);
+            if (availableDates.length === 0) return null;
 
             return {
               ...doc,
-              openSlots,
-              modeLabel: getConsultationModeLabel(doc, openSlots),
+              availableDates,
             };
           })
         );
@@ -362,10 +373,8 @@ const Landing = () => {
     };
   }, []);
 
-  const handleSlotClick = (doctorId, slotItem) => {
-    const slotIdOrTime =
-      typeof slotItem === 'object' ? slotItem._id || formatSlotTime(slotItem) : slotItem;
-    const targetUrl = `/patient/checkout/${doctorId}?slot=${encodeURIComponent(slotIdOrTime)}`;
+  const handleDayClick = (doctorId, dateKey) => {
+    const targetUrl = `/patient/checkout/${doctorId}?date=${encodeURIComponent(dateKey)}`;
     handleProtectedAction(targetUrl);
   };
 
@@ -397,16 +406,14 @@ const Landing = () => {
       transition={{ duration: 0.35, ease: [0.19, 1, 0.22, 1] }}
       style={{ width: '100%' }}
     >
-      {/* =====================================================================
-          1. HERO SECTION (SITS IMMEDIATELY ABOVE THE UNIFIED STORYTELLER TRACK)
-          ===================================================================== */}
+      {/* 1. HERO SECTION */}
       <section
         style={{
           minHeight: 'calc(100vh - 148px)',
           width: '100%',
           padding: '32px 48px 36px 48px',
           display: 'grid',
-          gridTemplateColumns: '1.25fr 420px',
+          gridTemplateColumns: '1.25fr 440px',
           gap: '48px',
         }}
       >
@@ -478,7 +485,7 @@ const Landing = () => {
           </motion.div>
         </motion.div>
 
-        {/* RIGHT COLUMN: Live Randomized Available Doctors Widget (Max 2) */}
+        {/* RIGHT COLUMN: Live Available Days & Modes Widget (Max 2 Doctors) */}
         <motion.div
           initial={{ opacity: 0, y: 24, scale: 0.985 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -528,9 +535,9 @@ const Landing = () => {
               <MapPin size={14} strokeWidth={1.8} />
               <span>
                 {loadingDoctors
-                  ? 'Checking live specialist slots...'
+                  ? 'Checking live specialist availability...'
                   : availableDoctors.length > 0
-                  ? 'Available Slots, doctors open now'
+                  ? 'Doctors open this week — pick a day'
                   : 'Live Slot Availability'}
               </span>
             </div>
@@ -559,17 +566,17 @@ const Landing = () => {
                 <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
                   <div
                     style={{
-                      width: '84px',
-                      height: '30px',
-                      borderRadius: '999px',
+                      width: '120px',
+                      height: '38px',
+                      borderRadius: '12px',
                       background: 'rgba(255, 255, 255, 0.14)',
                     }}
                   />
                   <div
                     style={{
-                      width: '84px',
-                      height: '30px',
-                      borderRadius: '999px',
+                      width: '120px',
+                      height: '38px',
+                      borderRadius: '12px',
                       background: 'rgba(255, 255, 255, 0.09)',
                     }}
                   />
@@ -583,8 +590,9 @@ const Landing = () => {
                   doc.specialisations?.[0]?.name ||
                   doc.specialisation ||
                   'General Medicine';
-                const hasRating = doc.rating?.avg && Number(doc.rating.avg) > 0;
-                const displaySlots = (doc.openSlots || []).slice(0, 2);
+                // Strict boolean so 0 is never rendered in JSX!
+                const hasRating = Number(doc.rating?.avg) > 0;
+                const displayDays = (doc.availableDates || []).slice(0, 2);
 
                 return (
                   <div
@@ -639,55 +647,71 @@ const Landing = () => {
                         gap: '6px',
                         fontSize: '13px',
                         color: 'rgba(255, 255, 255, 0.85)',
-                        marginBottom: '16px',
+                        marginBottom: '14px',
                       }}
                     >
                       <span>{docSpec}</span>
+                      {doc.city && (
+                        <>
+                          <span>•</span>
+                          <span>{doc.city}</span>
+                        </>
+                      )}
                       {hasRating && (
                         <>
+                          <span>•</span>
                           <Star size={11} fill="currentColor" />
-                          <span>{doc.rating.avg} rating</span>
+                          <span>{Number(doc.rating.avg).toFixed(1)}</span>
                         </>
                       )}
                     </div>
 
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: '8px',
-                        flexWrap: 'wrap',
-                      }}
-                    >
-                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                        {displaySlots.map((slotItem, sIdx) => {
-                          const label = formatSlotTime(slotItem);
-                          return (
-                            <button
-                              key={slotItem._id || label || sIdx}
-                              onClick={() => handleSlotClick(docId, slotItem)}
-                              className={`time-slot-btn ${sIdx === 0 ? 'primary' : 'secondary'}`}
-                            >
-                              {label}
-                            </button>
-                          );
-                        })}
-                      </div>
+                    {/* Available Days with Live Per-Day Mode Label */}
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      {displayDays.map((dObj, dIdx) => {
+                        const modeText =
+                          dObj.hasVideo && dObj.hasClinic
+                            ? 'Video & Clinic'
+                            : dObj.hasClinic
+                            ? 'In-Clinic'
+                            : 'Video';
 
-                      <span
-                        style={{
-                          fontSize: '12px',
-                          color: 'rgba(255, 255, 255, 0.92)',
-                          background: 'rgba(255, 255, 255, 0.1)',
-                          border: '1px solid rgba(255, 255, 255, 0.18)',
-                          padding: '6px 11px',
-                          borderRadius: '999px',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {doc.modeLabel}
-                      </span>
+                        return (
+                          <button
+                            key={dObj.dateKey}
+                            type="button"
+                            onClick={() => handleDayClick(docId, dObj.dateKey)}
+                            className={`time-slot-btn ${dIdx === 0 ? 'primary' : 'secondary'}`}
+                            style={{
+                              display: 'inline-flex',
+                              flexDirection: 'column',
+                              alignItems: 'flex-start',
+                              gap: '2px',
+                              padding: '8px 13px',
+                              borderRadius: '13px',
+                              fontSize: '12.5px',
+                            }}
+                          >
+                            <span style={{ fontWeight: 500 }}>{dObj.label}</span>
+                            <span
+                              style={{
+                                fontSize: '10.5px',
+                                opacity: dIdx === 0 ? 0.82 : 0.76,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                              }}
+                            >
+                              {dObj.hasClinic && !dObj.hasVideo ? (
+                                <Building2 size={10} />
+                              ) : (
+                                <Video size={10} />
+                              )}
+                              <span>{modeText}</span>
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 );
@@ -761,12 +785,9 @@ const Landing = () => {
         </motion.div>
       </section>
 
-      {/* =====================================================================
-          2. UNIFIED STICKY SHOWCASE TRACK (BAR + STAGE MOVE TOGETHER AS ONE UNIT!)
-          ===================================================================== */}
+      {/* 2. UNIFIED STICKY SHOWCASE TRACK */}
       <section ref={trackRef} className="story-chapters-track">
         <div className="story-unified-sticky-viewport">
-          {/* TOP OF STICKY VIEWPORT: THE FRAMELESS STORYTELLER BAR */}
           <div className="storyteller-bar-surface">
             <motion.div
               style={{
@@ -815,7 +836,6 @@ const Landing = () => {
             })}
           </div>
 
-          {/* BELOW THE BAR: THE 5-CHAPTER STAGE (NEVER COLLIDES WITH BAR OR FOOTER) */}
           <div className="story-chapters-stage">
             <div
               style={{
@@ -826,7 +846,6 @@ const Landing = () => {
                 alignItems: 'center',
               }}
             >
-              {/* LEFT SIDE */}
               <div style={{ maxWidth: '580px' }}>
                 <AnimatePresence mode="wait">
                   <motion.div
@@ -930,7 +949,6 @@ const Landing = () => {
                 </AnimatePresence>
               </div>
 
-              {/* RIGHT SIDE: 3D Multi-Plane Glass Sculpture */}
               <div className="sculpture-3d-scene">
                 <motion.div
                   style={{

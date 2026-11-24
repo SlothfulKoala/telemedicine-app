@@ -274,11 +274,13 @@ const ScheduleBuilder = () => {
 
   const [showProfileDrawer, setShowProfileDrawer] = useState(false);
   const [profileForm, setProfileForm] = useState({
-    specialisation: 'Cardiology',
-    feeRupees: '500',
-    qualifications: 'MBBS, MD',
-    regNumber: 'MCI-2026-84920',
-  });
+  specialisation: 'Cardiology',
+  feeRupees: '500',
+  qualifications: 'MBBS, MD',
+  city: '',
+  clinicAddress: '',
+  regNumber: 'MCI-2026-84920',
+});
   const [savingProfile, setSavingProfile] = useState(false);
 
   const markDirty = () => {
@@ -322,12 +324,14 @@ const ScheduleBuilder = () => {
               ? myDoc.qualifications.map((q) => (typeof q === 'object' ? q.degree : q)).join(', ')
               : 'MBBS, MD';
 
-            setProfileForm({
-              specialisation: specName,
-              feeRupees: String(feeRs),
-              qualifications: quals,
-              regNumber: myDoc.regNumber || 'MCI-2026-84920',
-            });
+              setProfileForm({
+                specialisation: specName,
+                feeRupees: String(feeRs),
+                qualifications: quals,
+                regNumber: myDoc.regNumber || 'MCI-2026-84920',
+                city: myDoc.city || '',
+                clinicAddress: myDoc.clinicAddress || '',
+              });
           }
         }
 
@@ -631,6 +635,8 @@ const ScheduleBuilder = () => {
       await api.post('/doctors/profile', {
         regNumber: profileForm.regNumber.trim() || 'MCI-2026-84920',
         fee: Math.round((Number(profileForm.feeRupees) || 500) * 100),
+        city: profileForm.city.trim(),
+        clinicAddress: profileForm.clinicAddress.trim(),
         specialisations: [profileForm.specialisation],
         consultationModes: ['video', 'in_person'],
         qualifications: parsedQuals.map((deg) => ({
@@ -870,6 +876,7 @@ const ScheduleBuilder = () => {
                   required
                 />
               </div>
+
               <div className="auth-input-group">
                 <label className="auth-input-label">Consultation Fee (₹)</label>
                 <input
@@ -880,6 +887,7 @@ const ScheduleBuilder = () => {
                   required
                 />
               </div>
+
               <div className="auth-input-group">
                 <label className="auth-input-label">Qualifications (comma separated)</label>
                 <input
@@ -892,6 +900,32 @@ const ScheduleBuilder = () => {
                   required
                 />
               </div>
+
+              <div className="auth-input-group">
+                <label className="auth-input-label">City</label>
+                <input
+                  type="text"
+                  placeholder="e.g. New Delhi"
+                  value={profileForm.city}
+                  onChange={(e) => setProfileForm((p) => ({ ...p, city: e.target.value }))}
+                  className="auth-input-field"
+                  required
+                />
+              </div>
+
+              <div className="auth-input-group" style={{ gridColumn: 'span 2' }}>
+                <label className="auth-input-label">Full Clinic Address (for In-Person Visits)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Clinic 14, Block B, Connaught Place"
+                  value={profileForm.clinicAddress}
+                  onChange={(e) =>
+                    setProfileForm((p) => ({ ...p, clinicAddress: e.target.value }))
+                  }
+                  className="auth-input-field"
+                />
+              </div>
+
               <button
                 type="submit"
                 disabled={savingProfile}

@@ -12,6 +12,10 @@ import {
   XCircle,
   Stethoscope,
   Sparkles,
+  MapPin,
+  ExternalLink,
+  X,
+  Pill,
 } from 'lucide-react';
 import { api, useAuth } from '../../context/AuthContext';
 
@@ -31,16 +35,17 @@ const formatReadableDate = (raw) => {
 
 const formatReadableTime = (appt) => {
   if (appt.slotTime) return appt.slotTime;
-  const start = appt.slotId?.startTime || appt.startTime || appt.time;
+  const start = appt.startAt || appt.slotId?.startTime || appt.startTime || appt.time;
   if (!start) return '09:00 AM';
-  if (String(start).includes('T')) {
-    const d = new Date(start);
-    if (!isNaN(d.getTime())) {
-      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    }
+  const d = new Date(start);
+  if (!isNaN(d.getTime())) {
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
   return String(start);
 };
+
+const buildMapsUrl = (addressText) =>
+  `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addressText)}`;
 
 const PatientDashboard = () => {
   const { user } = useAuth();
@@ -52,6 +57,15 @@ const PatientDashboard = () => {
   const [actionError, setActionError] = useState('');
   const [reloadCount, setReloadCount] = useState(0);
   const [activeTab, setActiveTab] = useState('upcoming'); // 'upcoming' | 'past'
+
+  // Inline Note Editing State
+  const [editingNoteId, setEditingNoteId] = useState(null);
+  const [noteDraft, setNoteDraft] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
+
+  // Patient Prescription Viewer Modal State
+  const [activePrescription, setActivePrescription] = useState(null);
+  const [loadingRxId, setLoadingRxId] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -93,6 +107,44 @@ const PatientDashboard = () => {
       );
     } catch (error) {
       setActionError(error.response?.data?.message || 'Unable to cancel this appointment.');
+    }
+  };
+
+  const handleSaveNote = async (apptId) => {
+    try {
+      setSavingNote(true);
+      setActionError('');
+      const res = await api.patch(`/booking/patient/appointments/${apptId}/note`, {
+        reason: noteDraft.trim(),
+      });
+      const updatedReason = res.data?.data?.reason || '';
+      setAppointments((prev) =>
+        prev.map((a) =>
+          (a._id || a.id) === apptId ? { ...a, reason: updatedReason || undefined } : a
+        )
+      );
+      setEditingNoteId(null);
+    } catch (error) {
+      setActionError(error.response?.data?.message || 'Could not update note.');
+    } finally {
+      setSavingNote(false);
+    }
+  };
+
+  const handleViewPrescription = async (apptId) => {
+    try {
+      setLoadingRxId(apptId);
+      setActionError('');
+      const res = await api.get(`/booking/patient/appointments/${apptId}/prescription`);
+      if (res.data?.data) {
+        setActivePrescription(res.data.data);
+      }
+    } catch (error) {
+      setActionError(
+        error.response?.data?.message || 'No prescription is available for this consultation yet.'
+      );
+    } finally {
+      setLoadingRxId(null);
     }
   };
 
@@ -243,7 +295,7 @@ const PatientDashboard = () => {
         </div>
       </div>
 
-      {/* Segmented Tab Switcher: Upcoming vs Past */}
+      {/* Segmented Tab Switcher */}
       <div
         className="auth-segmented-track"
         style={{
@@ -295,14 +347,18 @@ const PatientDashboard = () => {
           <p role="alert" style={{ color: 'var(--cream-soft)', marginBottom: '18px' }}>
             {loadError}
           </p>
-          <button type="button" className="btn-cream-pill" onClick={() => setReloadCount((n) => n + 1)}>
+          <button
+            type="button"
+            className="btn-cream-pill"
+            onClick={() => setReloadCount((n) => n + 1)}
+          >
             Try again
           </button>
         </div>
       ) : displayedList.length > 0 ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {actionError && (
-            <p role="alert" style={{ color: '#ffd6d6' }}>
+            <p role="alert" style={{ color: '#ffd6d6', fontSize: '13.5px' }}>
               {actionError}
             </p>
           )}
@@ -317,6 +373,7 @@ const PatientDashboard = () => {
                 docObj.specialisation ||
                 appt.specialisation ||
                 'Specialist Consultation';
+              const fullAddress = [docObj.clinicAddress, docObj.city].filter(Boolean).join(', ');
               const mode = String(appt.mode || appt.slotId?.mode || 'video').toLowerCase();
               const isVideo = !mode.includes('person') && !mode.includes('clinic');
               const status = String(appt.status || 'confirmed').toLowerCase();
@@ -330,8 +387,8 @@ const PatientDashboard = () => {
                   exit={{ opacity: 0, scale: 0.98 }}
                   className="appointment-row-card"
                 >
-                  {/* Left: Specialist & Time Details */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
+                  {/* Left: Specialist, Address & Editable Note */}
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '18px' }}>
                     <div
                       style={{
                         width: '48px',
@@ -343,13 +400,14 @@ const PatientDashboard = () => {
                         alignItems: 'center',
                         justifyContent: 'center',
                         flexShrink: 0,
+                        marginTop: '2px',
                       }}
                     >
                       <Stethoscope size={22} />
                     </div>
 
                     <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                         <h3 style={{ fontSize: '18px', fontWeight: 500, color: '#ffffff' }}>
                           {docName}
                         </h3>
@@ -400,22 +458,125 @@ const PatientDashboard = () => {
                         </span>
                       </div>
 
-                      {appt.reason && (
+                      {/* Clinic Address Guardrail: Only show Directions when street clinicAddress exists */}
+                      {!isVideo && (docObj.clinicAddress || docObj.city) && (
                         <div
                           style={{
                             fontSize: '12.5px',
-                            color: 'var(--cream-muted)',
-                            marginTop: '6px',
+                            color: 'var(--cream)',
+                            marginTop: '7px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            flexWrap: 'wrap',
+                            gap: '10px',
                           }}
                         >
-                          Note: “{appt.reason}”
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                            <MapPin size={13} />
+                            <span>
+                              {docObj.clinicAddress
+                                ? `${docObj.clinicAddress}${docObj.city ? `, ${docObj.city}` : ''}`
+                                : `${docObj.city} (Full clinic address not added yet)`}
+                            </span>
+                          </span>
+                          {docObj.clinicAddress && (
+                            <a
+                              href={buildMapsUrl(fullAddress)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                color: '#d8f3e5',
+                                textDecoration: 'underline',
+                                fontSize: '12px',
+                              }}
+                            >
+                              <span>Directions</span>
+                              <ExternalLink size={11} />
+                            </a>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Editable Patient Note */}
+                      {editingNoteId === apptId ? (
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            marginTop: '8px',
+                            flexWrap: 'wrap',
+                          }}
+                        >
+                          <input
+                            type="text"
+                            value={noteDraft}
+                            onChange={(e) => setNoteDraft(e.target.value)}
+                            placeholder="Add symptoms or a note for the doctor..."
+                            className="auth-input-field"
+                            style={{ padding: '6px 12px', fontSize: '12.5px', minWidth: '260px' }}
+                          />
+                          <button
+                            type="button"
+                            disabled={savingNote}
+                            onClick={() => handleSaveNote(apptId)}
+                            className="time-slot-btn primary"
+                            style={{ padding: '6px 12px', fontSize: '12px' }}
+                          >
+                            {savingNote ? 'Saving...' : 'Save Note'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingNoteId(null)}
+                            className="time-slot-btn secondary"
+                            style={{ padding: '6px 10px', fontSize: '12px' }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px',
+                            marginTop: '6px',
+                            fontSize: '12.5px',
+                            color: 'var(--cream-muted)',
+                            flexWrap: 'wrap',
+                          }}
+                        >
+                          {appt.reason && <span>Note: {appt.reason}</span>}
+                          {activeTab === 'upcoming' && status === 'confirmed' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingNoteId(apptId);
+                                setNoteDraft(appt.reason || '');
+                              }}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: 'var(--cream)',
+                                textDecoration: 'underline',
+                                fontSize: '12px',
+                                cursor: 'pointer',
+                                padding: 0,
+                              }}
+                            >
+                              {appt.reason ? 'Edit note' : '+ Add note for doctor'}
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
                   </div>
 
                   {/* Right: Action Buttons */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                     {status === 'cancelled' ? (
                       <span
                         className="qualification-tag-pill"
@@ -456,13 +617,29 @@ const PatientDashboard = () => {
                         )}
                       </>
                     ) : (
-                      <span
-                        className="qualification-tag-pill"
-                        style={{ padding: '6px 12px', color: '#d8f3e5' }}
-                      >
-                        <CheckCircle2 size={13} />
-                        <span>{status === 'no_show' ? 'Missed' : 'Completed'}</span>
-                      </span>
+                      <>
+                        {status === 'completed' && appt.hasPrescription && (
+                          <button
+                            type="button"
+                            disabled={loadingRxId === apptId}
+                            onClick={() => handleViewPrescription(apptId)}
+                            className="btn-cream-pill"
+                            style={{ padding: '9px 18px', fontSize: '13px' }}
+                          >
+                            <FileText size={14} />
+                            <span>
+                              {loadingRxId === apptId ? 'Loading...' : 'View Prescription'}
+                            </span>
+                          </button>
+                        )}
+                        <span
+                          className="qualification-tag-pill"
+                          style={{ padding: '6px 12px', color: '#d8f3e5' }}
+                        >
+                          <CheckCircle2 size={13} />
+                          <span>{status === 'no_show' ? 'Missed' : 'Completed'}</span>
+                        </span>
+                      </>
                     )}
                   </div>
                 </motion.div>
@@ -497,6 +674,131 @@ const PatientDashboard = () => {
           </Link>
         </div>
       )}
+
+      {/* Patient Digital Prescription Modal */}
+      <AnimatePresence>
+        {activePrescription && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setActivePrescription(null)}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(6, 11, 22, 0.72)',
+              backdropFilter: 'blur(8px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '20px',
+              zIndex: 200,
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 16, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12, scale: 0.97 }}
+              onClick={(e) => e.stopPropagation()}
+              className="glass-card"
+              style={{
+                width: '100%',
+                maxWidth: '640px',
+                padding: '32px',
+                maxHeight: '85vh',
+                overflowY: 'auto',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  gap: '16px',
+                  marginBottom: '20px',
+                }}
+              >
+                <div>
+                  <div
+                    style={{
+                      fontSize: '11.5px',
+                      letterSpacing: '0.07em',
+                      color: 'var(--cream-muted)',
+                      marginBottom: '6px',
+                    }}
+                  >
+                    DIGITAL PRESCRIPTION • V{activePrescription.version}
+                  </div>
+                  <h2 style={{ fontSize: '22px', fontWeight: 500, color: '#ffffff' }}>
+                    {activePrescription.doctorName}
+                  </h2>
+                  <div style={{ fontSize: '13.5px', color: 'var(--cream-soft)', marginTop: '2px' }}>
+                    {activePrescription.specialisation} • Issued{' '}
+                    {formatReadableDate(activePrescription.issuedAt)}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setActivePrescription(null)}
+                  className="nav-login-btn"
+                  style={{ padding: '8px' }}
+                  aria-label="Close prescription"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {(activePrescription.medicines || []).map((med, i) => (
+                  <div
+                    key={`${med.name}-${i}`}
+                    className="glass-widget-inner"
+                    style={{
+                      padding: '15px 18px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: '12px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div
+                        style={{
+                          width: '34px',
+                          height: '34px',
+                          borderRadius: '10px',
+                          background: 'rgba(132, 181, 159, 0.18)',
+                          color: '#d8f3e5',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Pill size={16} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '15.5px', fontWeight: 500, color: '#ffffff' }}>
+                          {med.name}
+                        </div>
+                        <div style={{ fontSize: '12.5px', color: 'var(--cream-soft)' }}>
+                          Dosage: {med.dosage}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      <span className="qualification-tag-pill">Freq: {med.frequency}</span>
+                      <span className="qualification-tag-pill">Duration: {med.duration}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.main>
   );
 };

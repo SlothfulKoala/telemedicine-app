@@ -51,7 +51,6 @@ async function register(req, res) {
     role,
   } = req.body || {};
 
-  // Public registration is limited to patients and doctors.
   if (!['patient', 'doctor'].includes(role)) {
     return res.status(400).json({
       message: 'Public registration is only available for patients and doctors.',
@@ -133,6 +132,7 @@ async function completeDoctorProfile(req, res) {
     regNumber,
     fee,
     city,
+    clinicAddress,
     consultationModes,
     specialisations,
     qualifications,
@@ -216,7 +216,6 @@ async function completeDoctorProfile(req, res) {
     specialisationRecords.push(specialisation);
   }
 
-  // Enable both 'video' and 'in_person' by default so hybrid schedules never fail validation
   const validModes = Array.isArray(consultationModes) && consultationModes.length > 0
     ? consultationModes.filter((m) => ['video', 'in_person'].includes(m))
     : ['video', 'in_person'];
@@ -239,8 +238,11 @@ async function completeDoctorProfile(req, res) {
     updateData.city = city.trim();
   }
 
+  if (typeof clinicAddress === 'string') {
+    updateData.clinicAddress = clinicAddress.trim();
+  }
+
   try {
-    // Upsert allows both initial registration AND subsequent profile edits!
     await DoctorProfile.findOneAndUpdate(
       { userId: req.auth.userId },
       { $set: updateData },

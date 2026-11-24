@@ -37,7 +37,6 @@ const MODE_FILTERS = [
   { label: 'In-Person Clinic', value: 'in_person' },
 ];
 
-// Safely extract a valid JS Date from a MongoDB Slot object (prioritizing startAt!)
 const getSlotDateObj = (slot) => {
   if (!slot || typeof slot !== 'object') return null;
   const candidates = [slot.startAt, slot.date, slot.startTime];
@@ -77,7 +76,6 @@ const formatFriendlyDateLabel = (dateObj) => {
   });
 };
 
-// Group open slots within the rolling 7-day window (Today through Today + 6 days)
 const groupSevenDaySlotsByDate = (openSlots) => {
   const now = new Date();
   const weekEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7, 0, 0, 0, 0);
@@ -86,7 +84,6 @@ const groupSevenDaySlotsByDate = (openSlots) => {
   (openSlots || []).forEach((slot) => {
     const d = getSlotDateObj(slot);
     if (!d) return;
-    // Strictly keep slots from now up to the end of the 7-day rolling window
     if (d < now || d >= weekEnd) return;
 
     const dateKey = toLocalDateKey(d);
@@ -114,12 +111,13 @@ const FilterGlassSelect = ({ label, value, options, onChange }) => {
   const ref = useRef(null);
 
   useEffect(() => {
+    if (!open) return;
     const close = (e) => {
       if (ref.current && !ref.current.contains(e.target)) setOpen(false);
     };
     document.addEventListener('mousedown', close);
     return () => document.removeEventListener('mousedown', close);
-  }, []);
+  }, [open]);
 
   return (
     <div className="auth-input-group" ref={ref} style={{ zIndex: open ? 90 : 1 }}>
@@ -254,6 +252,7 @@ const DoctorSearch = () => {
   const [doctors, setDoctors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedDateByDoc, setSelectedDateByDoc] = useState({});
+  const [upcomingByDoctor, setUpcomingByDoctor] = useState({});
 
   useEffect(() => {
     let isMounted = true;
@@ -266,6 +265,26 @@ const DoctorSearch = () => {
           res.data?.data ||
           res.data?.doctors ||
           (Array.isArray(res.data) ? res.data : []);
+
+        if (user?.role === 'patient') {
+          try {
+            const apptRes = await api.get('/booking/patient/appointments');
+            const appts = apptRes.data?.appointments || apptRes.data?.data || [];
+            const map = {};
+            appts.forEach((a) => {
+              const st = String(a.status || '').toLowerCase();
+              const dId = a.doctorId?._id || a.doctorId;
+              if (dId && (st === 'confirmed' || st === 'in_progress') && !map[dId]) {
+                map[dId] = a;
+              }
+            });
+            if (isMounted) setUpcomingByDoctor(map);
+          } catch (e) {
+            // Non-blocking
+          }
+        } else if (isMounted) {
+          setUpcomingByDoctor({});
+        }
 
         if (!Array.isArray(rawList) || rawList.length === 0) {
           if (isMounted) setDoctors([]);
@@ -300,7 +319,6 @@ const DoctorSearch = () => {
               }
             }
 
-            // Strictly keep ONLY truly FREE ('open') slots within the rolling 7-day window
             const sevenDayOpenSlots = (rawSlots || []).filter((s) => {
               if (!s || typeof s !== 'object') return false;
               const status = String(s.status || 'open').toLowerCase();
@@ -321,7 +339,6 @@ const DoctorSearch = () => {
           })
         );
 
-        // RULE: Do NOT show doctors at all if they have 0 free slots in the next 7 days!
         const availableOnly = enriched.filter((d) => d.availableDates.length > 0);
 
         if (isMounted) {
@@ -346,12 +363,11 @@ const DoctorSearch = () => {
     return () => {
       isMounted = false;
     };
-  }, [searchParams]);
+  }, [searchParams, user?.role]);
 
   const filteredDoctors = useMemo(() => {
     return doctors
       .map((doc) => {
-        // If user filtered by Video or In-Person, only count slots matching that mode
         const modeScopedSlots =
           modeFilter === 'all'
             ? doc.sevenDayOpenSlots
@@ -368,7 +384,6 @@ const DoctorSearch = () => {
         };
       })
       .filter((doc) => {
-        // Hide doctor if they have no free slots left for the chosen mode/week
         if (doc.scopedDates.length === 0) return false;
 
         const name = String(doc.userId?.name || doc.name || '').toLowerCase();
@@ -434,7 +449,6 @@ const DoctorSearch = () => {
       transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
       className="search-page-container"
     >
-      {/* Calm Header & 3-Step Guidance Strip */}
       <div style={{ marginBottom: '26px' }}>
         <div
           style={{
@@ -463,8 +477,8 @@ const DoctorSearch = () => {
         </h1>
 
         <p style={{ fontSize: '15.5px', color: 'var(--cream-soft)', maxWidth: '650px' }}>
-          We only show verified doctors with confirmed open slots over the next 7 days. Pick a day
-          below to see that day’s exact time slots.
+          We only show verified doctors with confirmed open slots over the next 7 days. Each day
+          shows whether Video, In-Clinic, or both are currently open.
         </p>
       </div>
 
@@ -577,6 +591,51 @@ const DoctorSearch = () => {
             return (
               <div key={docId} className="doctor-directory-card">
                 <div>
+                  {/* Calm Upcoming Visit Badge if patient already has a booked appointment */}
+                  {upcomingByDoctor[docId] && (
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '10px',
+                        padding: '8px 12px',
+                        borderRadius: '11px',
+                        background: 'rgba(132, 181, 159, 0.16)',
+                        border: '1px solid rgba(132, 181, 159, 0.38)',
+                        color: '#d8f3e5',
+                        fontSize: '12px',
+                        marginBottom: '12px',
+                      }}
+                    >
+                      <span>
+                        ✓ Upcoming visit:{' '}
+                        <strong>
+                          {new Date(upcomingByDoctor[docId].startAt).toLocaleDateString('en-IN', {
+                            weekday: 'short',
+                            day: 'numeric',
+                            month: 'short',
+                          })}{' '}
+                          • {upcomingByDoctor[docId].slotTime}
+                        </strong>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => navigate('/patient/dashboard')}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#ffffff',
+                          textDecoration: 'underline',
+                          fontSize: '11.5px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        View ↗
+                      </button>
+                    </div>
+                  )}
+
                   <div
                     style={{
                       display: 'flex',
@@ -685,7 +744,7 @@ const DoctorSearch = () => {
                   </div>
                 </div>
 
-                {/* Rolling 7-Day Available Dates */}
+                {/* Rolling 7-Day Available Dates with Dynamic Per-Day Mode Labels */}
                 <div
                   style={{
                     borderTop: '1px solid rgba(255, 255, 255, 0.14)',
@@ -712,6 +771,13 @@ const DoctorSearch = () => {
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                     {availableDates.map((dObj) => {
                       const isSelected = selectedDateKey === dObj.dateKey;
+                      const dayModeLabel =
+                        dObj.hasVideo && dObj.hasClinic
+                          ? 'Video & Clinic'
+                          : dObj.hasClinic
+                          ? 'In-Clinic'
+                          : 'Video';
+
                       return (
                         <button
                           key={dObj.dateKey}
@@ -725,15 +791,35 @@ const DoctorSearch = () => {
                           className={`time-slot-btn ${isSelected ? 'primary' : 'secondary'}`}
                           style={{
                             display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px',
+                            flexDirection: 'column',
+                            alignItems: 'flex-start',
+                            gap: '2px',
                             padding: '8px 13px',
                             fontSize: '12.5px',
+                            borderRadius: '13px',
                           }}
                         >
-                          <span>{dObj.label}</span>
-                          <span style={{ fontSize: '11px', opacity: 0.78 }}>
-                            • {dObj.count} free
+                          <span style={{ fontWeight: 500 }}>
+                            {dObj.label}{' '}
+                            <span style={{ fontSize: '11px', opacity: 0.75 }}>
+                              ({dObj.count})
+                            </span>
+                          </span>
+                          <span
+                            style={{
+                              fontSize: '10.5px',
+                              opacity: isSelected ? 0.85 : 0.74,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                            }}
+                          >
+                            {dObj.hasClinic && !dObj.hasVideo ? (
+                              <Building2 size={10} />
+                            ) : (
+                              <Video size={10} />
+                            )}
+                            <span>{dayModeLabel}</span>
                           </span>
                         </button>
                       );

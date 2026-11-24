@@ -372,8 +372,13 @@ async function confirmBooking(req, res) {
       appointment.status = 'confirmed';
       appointment.mode = slot.mode;
       appointment.paymentId = payment._id;
-      if (reason !== undefined) appointment.reason = reason;
-      if (notes !== undefined) appointment.notes = notes;
+
+      // Only encrypt and persist non-empty notes
+      const cleanedReason = typeof reason === 'string' ? reason.trim() : '';
+      const cleanedNotes = typeof notes === 'string' ? notes.trim() : '';
+      if (cleanedReason) appointment.reason = cleanedReason;
+      if (cleanedNotes) appointment.notes = cleanedNotes;
+
       if (slot.mode === 'video' && !appointment.roomId) {
         appointment.roomId = `room-${crypto.randomBytes(16).toString('hex')}`;
       }
@@ -413,28 +418,133 @@ async function getPatientAppointments(req, res) {
     patientId: req.auth.userId,
     status: { $nin: ['held', 'expired'] },
   })
-    .select('doctorId startAt endAt mode status reason createdAt')
+    .select('doctorId startAt endAt mode status reason __enc_reason createdAt')
     .populate({
       path: 'doctorId',
-      select: 'userId specialisations',
+      select: 'userId specialisations city clinicAddress',
       populate: [
         { path: 'userId', select: 'name' },
         { path: 'specialisations', select: 'name' },
       ],
     })
     .sort({ startAt: 1 })
-    .limit(100)
-    .lean();
+    .limit(100);
 
-  const data = appointments.map((appointment) => ({
-    ...appointment,
-    date: appointment.startAt,
-    slotTime: appointment.startAt
-      ? timeLabel(appointment.startAt, 'Asia/Kolkata')
-      : undefined,
-  }));
+  const appointmentIds = appointments.map((doc) => doc._id);
+  const existingPrescriptions = appointmentIds.length > 0
+    ? await Prescription.find({ appointmentId: { $in: appointmentIds } })
+      .select('appointmentId')
+      .lean()
+    : [];
+  const prescriptionSet = new Set(
+    existingPrescriptions.map((rx) => rx.appointmentId.toString())
+  );
+
+  const data = appointments.map((doc) => {
+    const appointment = doc.toObject({ getters: true });
+    const cleanReason = typeof appointment.reason === 'string' ? appointment.reason.trim() : '';
+    return {
+      ...appointment,
+      reason: cleanReason || undefined,
+      hasPrescription: prescriptionSet.has(doc._id.toString()),
+      date: appointment.startAt,
+      slotTime: appointment.startAt
+        ? timeLabel(appointment.startAt, 'Asia/Kolkata')
+        : undefined,
+    };
+  });
 
   return res.json({ success: true, count: data.length, data, appointments: data });
+}
+
+async function updatePatientAppointmentNote(req, res) {
+  const { appointmentId } = req.params;
+  const { reason } = req.body || {};
+
+  if (!mongoose.isValidObjectId(appointmentId)) {
+    return res.status(400).json({ success: false, message: 'A valid appointment ID is required.' });
+  }
+  if (typeof reason !== 'string' || reason.trim().length > 500) {
+    return res.status(400).json({
+      success: false,
+      message: 'Note must be a string up to 500 characters.',
+    });
+  }
+
+  const appointment = await Appointment.findOne({
+    _id: appointmentId,
+    patientId: req.auth.userId,
+    status: { $in: ['confirmed', 'in_progress'] },
+  });
+
+  if (!appointment) {
+    return res.status(404).json({ success: false, message: 'Upcoming appointment not found.' });
+  }
+
+  const trimmed = reason.trim();
+  if (trimmed) {
+    appointment.reason = trimmed;
+  } else {
+    appointment.reason = undefined;
+    appointment.__enc_reason = false;
+  }
+  await appointment.save();
+
+  return res.json({
+    success: true,
+    data: {
+      id: appointment._id,
+      reason: trimmed || '',
+    },
+  });
+}
+
+async function getPatientPrescription(req, res) {
+  const { appointmentId } = req.params;
+  if (!mongoose.isValidObjectId(appointmentId)) {
+    return res.status(400).json({ success: false, message: 'A valid appointment ID is required.' });
+  }
+
+  const prescriptionDoc = await Prescription.findOne({
+    appointmentId,
+    patientId: req.auth.userId,
+  }).populate({
+    path: 'doctorId',
+    select: 'userId specialisations',
+    populate: [
+      { path: 'userId', select: 'name' },
+      { path: 'specialisations', select: 'name' },
+    ],
+  });
+
+  if (!prescriptionDoc) {
+    return res.status(404).json({
+      success: false,
+      message: 'No prescription has been issued for this appointment yet.',
+    });
+  }
+
+  const prescription = prescriptionDoc.toObject({ getters: true });
+  let medicines = [];
+  try {
+    const parsed = JSON.parse(prescription.medicinesJson || '[]');
+    if (Array.isArray(parsed)) medicines = parsed;
+  } catch (e) {
+    medicines = [];
+  }
+
+  return res.json({
+    success: true,
+    data: {
+      id: prescription._id,
+      appointmentId: prescription.appointmentId,
+      version: prescription.version || 1,
+      issuedAt: prescription.updatedAt || prescription.createdAt,
+      doctorName: prescription.doctorId?.userId?.name || 'Verified Specialist',
+      specialisation: prescription.doctorId?.specialisations?.[0]?.name || 'Specialist',
+      medicines,
+    },
+  });
 }
 
 async function cancelPatientAppointment(req, res) {
@@ -521,24 +631,28 @@ async function getDoctorAppointments(req, res) {
     doctorId: doctorProfile._id,
     status: { $in: ['confirmed', 'in_progress'] },
   })
-    .select('patientId startAt endAt mode status')
+    .select('patientId startAt endAt mode status reason __enc_reason')
     .populate({ path: 'patientId', select: 'name' })
     .sort({ startAt: 1 })
-    .limit(100)
-    .lean();
+    .limit(100);
 
   const timezone = doctorProfile.timezone || 'Asia/Kolkata';
   return res.json({
     timezone,
-    appointments: appointments.map((appointment) => ({
-      id: appointment._id.toString(),
-      patientName: appointment.patientId?.name || 'Patient',
-      startAt: appointment.startAt,
-      slotTime: timeLabel(appointment.startAt, timezone),
-      endAt: appointment.endAt,
-      mode: appointment.mode,
-      status: appointment.status,
-    })),
+    appointments: appointments.map((doc) => {
+      const appointment = doc.toObject({ getters: true });
+      const cleanReason = typeof appointment.reason === 'string' ? appointment.reason.trim() : '';
+      return {
+        id: appointment._id.toString(),
+        patientName: appointment.patientId?.name || 'Patient',
+        startAt: appointment.startAt,
+        slotTime: timeLabel(appointment.startAt, timezone),
+        endAt: appointment.endAt,
+        mode: appointment.mode,
+        status: appointment.status,
+        reason: cleanReason || undefined,
+      };
+    }),
   });
 }
 
@@ -557,24 +671,28 @@ async function getCompletedDoctorAppointments(req, res) {
     doctorId: doctorProfile._id,
     status: 'completed',
   })
-    .select('patientId startAt endAt mode status')
+    .select('patientId startAt endAt mode status reason __enc_reason')
     .populate({ path: 'patientId', select: 'name' })
     .sort({ startAt: -1 })
-    .limit(100)
-    .lean();
+    .limit(100);
   const timezone = doctorProfile.timezone || 'Asia/Kolkata';
 
   return res.json({
     timezone,
-    appointments: appointments.map((appointment) => ({
-      id: appointment._id.toString(),
-      patientName: appointment.patientId?.name || 'Patient',
-      startAt: appointment.startAt,
-      slotTime: timeLabel(appointment.startAt, timezone),
-      endAt: appointment.endAt,
-      mode: appointment.mode,
-      status: appointment.status,
-    })),
+    appointments: appointments.map((doc) => {
+      const appointment = doc.toObject({ getters: true });
+      const cleanReason = typeof appointment.reason === 'string' ? appointment.reason.trim() : '';
+      return {
+        id: appointment._id.toString(),
+        patientName: appointment.patientId?.name || 'Patient',
+        startAt: appointment.startAt,
+        slotTime: timeLabel(appointment.startAt, timezone),
+        endAt: appointment.endAt,
+        mode: appointment.mode,
+        status: appointment.status,
+        reason: cleanReason || undefined,
+      };
+    }),
   });
 }
 
@@ -741,6 +859,8 @@ module.exports = {
   holdSlot,
   confirmBooking,
   getPatientAppointments,
+  updatePatientAppointmentNote,
+  getPatientPrescription,
   cancelPatientAppointment,
   getDoctorAppointments,
   getCompletedDoctorAppointments,
