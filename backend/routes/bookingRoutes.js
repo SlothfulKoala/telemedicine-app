@@ -9,11 +9,13 @@ const {
   getPatientAppointments,
   updatePatientAppointmentNote,
   getPatientPrescription,
+  getPatientPrescriptions,
   cancelPatientAppointment,
   getDoctorAppointments,
   getCompletedDoctorAppointments,
   completeDoctorAppointment,
   savePrescription,
+  getDoctorAnalytics,
 } = require('../controllers/bookingController');
 
 const {
@@ -77,6 +79,18 @@ router.post(
   authenticate,
   requireRole('doctor'),
   asyncHandler(savePrescription)
+);
+router.get(
+  '/doctor/analytics',
+  authenticate,
+  requireRole('doctor'),
+  asyncHandler(getDoctorAnalytics)
+);
+router.get(
+  '/patient/prescriptions',
+  authenticate,
+  requireRole('patient'),
+  asyncHandler(getPatientPrescriptions)
 );
 
 module.exports = router;

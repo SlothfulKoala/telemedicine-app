@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation, Link } from 'react-router-dom';
 import { AnimatePresence, motion, useMotionValue, useSpring } from 'framer-motion';
-import { AuthProvider } from '././context/AuthContext';
+import { AuthProvider } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import Landing from './pages/Landing';
 import Footer from './components/Footer';
@@ -11,8 +11,10 @@ import Login from './pages/Login';
 import DoctorSearch from './pages/patient/DoctorSearch';
 import BookingCheckout from './pages/patient/BookingCheckout';
 import PatientDashboard from './pages/patient/PatientDashboard';
+import HealthVault from './pages/patient/HealthVault';
 import DoctorDashboard from './pages/doctor/DoctorDashboard';
 import ScheduleBuilder from './pages/doctor/ScheduleBuilder';
+import DoctorAnalytics from './pages/doctor/DoctorAnalytics';
 
 const AnimatedPreviewPage = ({ title, subtitle, primaryActionText, primaryActionLink }) => (
   <motion.main
@@ -58,24 +60,26 @@ const AnimatedRoutes = () => {
   return (
     <AnimatePresence mode="wait">
       <Routes location={location} key={location.pathname}>
+        {/* Public & Auth Routes */}
         <Route path="/" element={<Landing />} />
         <Route path="/specialties" element={<Specialties />} />
         <Route path="/security" element={<SecurityPrivacy />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Login />} />
+
+        {/* Patient Routes */}
         <Route path="/search" element={<DoctorSearch />} />
         <Route path="/patient/checkout/:doctorId" element={<BookingCheckout />} />
-        <Route
-          path="/search"
-          element={
-            <AnimatedPreviewPage
-              title="Find Verified Specialists."
-              subtitle="Filter cardiologists, dermatologists, and general physicians by city and live 15-minute slot availability."
-              primaryActionText="Back to Overview"
-              primaryActionLink="/"
-            />
-          }
-        />
+        <Route path="/patient/dashboard" element={<PatientDashboard />} />
+        <Route path="/patient/appointments" element={<PatientDashboard />} />
+        <Route path="/vault" element={<HealthVault/>} />
+
+        {/* Doctor Routes */}
+        <Route path="/doctor/dashboard" element={<DoctorDashboard />} />
+        <Route path="/doctor/schedule" element={<ScheduleBuilder />} />
+        <Route path="/doctor/analytics" element={<DoctorAnalytics />} />
+
+        {/* Video Room Preview */}
         <Route
           path="/video"
           element={
@@ -87,52 +91,12 @@ const AnimatedRoutes = () => {
             />
           }
         />
-        <Route
-          path="/vault"
-          element={
-            <AnimatedPreviewPage
-              title="Encrypted Health Vault."
-              subtitle="Field-level AES-256 encrypted storage for your lab reports, prescriptions, and clinical history."
-              primaryActionText="Sign In to Access Vault"
-              primaryActionLink="/login"
-            />
-          }
-        />
-        <Route
-          path="/login"
-          element={
-            <AnimatedPreviewPage
-              title="Seamless access to modern care."
-              subtitle="Role-based authentication portal for Patients, Doctors, and System Administrators."
-              primaryActionText="Return Home"
-              primaryActionLink="/"
-            />
-          }
-        />
-        <Route path="/" element={<Landing />} />
-        <Route path="/specialties" element={<Specialties />} />
-        <Route path="/security" element={<SecurityPrivacy />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Login />} />
-
-        {/* Patient Routes (pages/patient/) */}
-        <Route path="/search" element={<DoctorSearch />} />
-        <Route path="/patient/checkout/:doctorId" element={<BookingCheckout />} />
-        <Route path="/patient/dashboard" element={<PatientDashboard />} />
-        <Route path="/patient/appointments" element={<PatientDashboard />} />
-        <Route path="/vault" element={<PatientDashboard />} />
-
-        {/* Doctor Routes (pages/doctor/) */}
-        <Route path="/doctor/dashboard" element={<DoctorDashboard />} />
-        <Route path="/doctor/queue" element={<DoctorDashboard />} />
-        <Route path="/doctor/schedule" element={<ScheduleBuilder />} />
       </Routes>
     </AnimatePresence>
   );
 };
 
 function App() {
-  // Subtle Mouse Parallax for the Fluted Glass Wall
   const rawX = useMotionValue(0);
   const rawY = useMotionValue(0);
   const bgX = useSpring(rawX, { stiffness: 60, damping: 25, mass: 1 });
@@ -153,7 +117,6 @@ function App() {
     <AuthProvider>
       <Router>
         <div className="fluted-app-shell">
-          {/* Interactive Parallax + Continuous Drift Fluted Glass Wall */}
           <motion.div
             style={{ x: bgX, y: bgY }}
             className="fluted-light-beams"
@@ -161,13 +124,8 @@ function App() {
           <div className="fluted-light-caustics" />
           <div className="fluted-glass-ribbing" />
 
-          {/* Dual-Layer Liquid Navbar */}
           <Navbar />
-
-          {/* Blur-Dissolve Animated Routes */}
           <AnimatedRoutes />
-
-          {/* Matte Frosted Glass Footer */}
           <Footer />
         </div>
       </Router>

@@ -537,7 +537,7 @@ const Landing = () => {
                 {loadingDoctors
                   ? 'Checking live specialist availability...'
                   : availableDoctors.length > 0
-                  ? 'Doctors open this week — pick a day'
+                  ? 'Doctors open this week'
                   : 'Live Slot Availability'}
               </span>
             </div>
