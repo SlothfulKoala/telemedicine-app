@@ -2,173 +2,187 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Calendar,
-  Clock,
+  Users,
+  CheckCircle2,
+  Sliders,
   Video,
   Building2,
-  Users,
-  FileCheck2,
-  Sliders,
+  Clock,
   Sparkles,
-  CheckCircle2,
-  AlertCircle,
   User,
+  IndianRupee,
+  FileText,
   Plus,
   Trash2,
+  X,
+  AlertCircle,
+  CreditCard,
 } from 'lucide-react';
 import { api, useAuth } from '../../context/AuthContext';
 
-const formatSlotDisplay = (appt) => {
-  if (appt.slotTime) return appt.slotTime;
-  const raw = appt.slotId?.startTime || appt.startTime || appt.date;
-  if (!raw) return 'Scheduled Slot';
-  const d = new Date(raw);
-  if (!isNaN(d.getTime())) {
-    return `${d.toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-    })} • ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-  }
-  return String(raw);
+const formatRupees = (paise) => {
+  const num = Number(paise || 0);
+  return `₹${Math.round(num / 100).toLocaleString('en-IN')}`;
 };
+
+const formatDateShort = (raw) => {
+  if (!raw) return '';
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-IN', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  });
+};
+
+const createEmptyMedicineRow = () => ({
+  name: '',
+  dosage: '',
+  frequency: '',
+  duration: '',
+});
 
 const DoctorDashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState('upcoming'); // 'upcoming' | 'completed'
-  const [upcomingAppts, setUpcomingAppts] = useState([]);
-  const [completedAppts, setCompletedAppts] = useState([]);
+  const [activeQueue, setActiveQueue] = useState([]);
+  const [completedList, setCompletedList] = useState([]);
+  const [weeklyEarnings, setWeeklyEarnings] = useState(0);
   const [timezone, setTimezone] = useState('Asia/Kolkata');
+  const [activeTab, setActiveTab] = useState('active'); // 'active' | 'completed'
   const [loading, setLoading] = useState(true);
-  const [actionError, setActionError] = useState('');
 
-  // Prescription Drawer State (Only for Completed Appointments per Backend Rule)
-  const [activeRxPatient, setActiveRxPatient] = useState(null);
-  const [medicines, setMedicines] = useState([
-    { name: '', dosage: '', frequency: '', duration: '' },
-  ]);
-  const [rxStatus, setRxStatus] = useState(null);
-  const [submittingRx, setSubmittingRx] = useState(false);
+  // 2-Step Completion -> Prescription Modal State
+  const [modalAppt, setModalAppt] = useState(null);
+  const [modalStep, setModalStep] = useState('complete'); // 'complete' | 'prescription'
+  const [markPaidNow, setMarkPaidNow] = useState(true);
+  const [collectedMethod, setCollectedMethod] = useState('clinic_upi');
+  const [transactionRef, setTransactionRef] = useState('');
+  const [submittingModal, setSubmittingModal] = useState(false);
+  const [modalError, setModalError] = useState('');
+  const [modalSuccess, setModalSuccess] = useState('');
 
-  const loadDoctorAppointments = useCallback(async () => {
+  // Structured Prescription Builder State (1–30 rows)
+  const [medicines, setMedicines] = useState([createEmptyMedicineRow()]);
+
+  const loadConsoleData = useCallback(async () => {
     try {
       setLoading(true);
-      setActionError('');
-
-      const [activeRes, completedRes] = await Promise.allSettled([
+      const [activeRes, completedRes, analyticsRes] = await Promise.allSettled([
         api.get('/booking/doctor/appointments'),
         api.get('/booking/doctor/appointments/completed'),
+        api.get('/booking/doctor/analytics'),
       ]);
 
       if (activeRes.status === 'fulfilled') {
-        const data = activeRes.value.data;
-        if (data?.timezone) setTimezone(data.timezone);
-        setUpcomingAppts(Array.isArray(data?.appointments) ? data.appointments : []);
+        setActiveQueue(activeRes.value.data?.appointments || []);
+        if (activeRes.value.data?.timezone) setTimezone(activeRes.value.data.timezone);
       }
-
       if (completedRes.status === 'fulfilled') {
-        const data = completedRes.value.data;
-        setCompletedAppts(Array.isArray(data?.appointments) ? data.appointments : []);
+        setCompletedList(completedRes.value.data?.appointments || []);
       }
-    } catch (err) {
-      setActionError('Unable to load appointments. Please ensure your backend server is running.');
+      if (analyticsRes.status === 'fulfilled') {
+        setWeeklyEarnings(analyticsRes.value.data?.kpis?.weeklyEarnings || 0);
+      }
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadDoctorAppointments();
-  }, [loadDoctorAppointments]);
+    loadConsoleData();
+  }, [loadConsoleData]);
 
-  // PATCH /api/booking/doctor/appointments/:appointmentId/complete
-  const handleMarkComplete = async (appt) => {
-    const apptId = appt._id || appt.id;
-    setActionError('');
+  const openCompleteModal = (appt) => {
+    setModalAppt(appt);
+    setModalStep('complete');
+    setMarkPaidNow(!appt.payment?.isPaid && (appt.payment?.amount || 0) > 0);
+    setCollectedMethod('clinic_upi');
+    setTransactionRef('');
+    setMedicines([createEmptyMedicineRow()]);
+    setModalError('');
+    setModalSuccess('');
+  };
+
+  const openPrescriptionModal = (appt) => {
+    setModalAppt(appt);
+    setModalStep('prescription');
+    setMedicines([createEmptyMedicineRow()]);
+    setModalError('');
+    setModalSuccess('');
+  };
+
+  const closeModal = () => {
+    setModalAppt(null);
+    setModalError('');
+    setModalSuccess('');
+  };
+
+  // Step 1: Complete Appointment (+ optionally mark Pay Later payment as collected)
+  const handleConfirmComplete = async () => {
+    if (!modalAppt) return;
+    setSubmittingModal(true);
+    setModalError('');
+
     try {
-      await api.patch(`/booking/doctor/appointments/${apptId}/complete`);
-      const updatedAppt = { ...appt, status: 'completed' };
-      setUpcomingAppts((prev) => prev.filter((a) => (a._id || a.id) !== apptId));
-      setCompletedAppts((prev) => [updatedAppt, ...prev]);
-      setActiveTab('completed');
-      // Automatically open the prescription drawer for the newly completed appointment
-      const patientName =
-        appt.patientId?.name || appt.patient?.name || appt.patientName || 'Patient';
-      setActiveRxPatient({ ...updatedAppt, patientName });
+      await api.patch(`/booking/doctor/appointments/${modalAppt.id}/complete`, {
+        markPaid: !modalAppt.payment?.isPaid && markPaidNow,
+        collectedMethod: markPaidNow ? collectedMethod : undefined,
+        transactionRef: markPaidNow && transactionRef.trim() ? transactionRef.trim() : undefined,
+      });
+
+      await loadConsoleData();
+      // Smoothly transition straight into Step 2: Issue Digital Prescription!
+      setModalStep('prescription');
+      setModalSuccess('Visit marked completed! You can now issue a digital prescription below.');
     } catch (err) {
-      const msg =
-        err.response?.data?.message ||
-        err.response?.data?.error ||
-        'Appointment can only be marked complete after its scheduled end time.';
-      setActionError(msg);
+      setModalError(
+        err.response?.data?.message || 'Could not mark this appointment as completed.'
+      );
+    } finally {
+      setSubmittingModal(false);
     }
   };
 
-  const handleAddMedicine = () => {
-    if (medicines.length >= 30) return;
-    setMedicines([...medicines, { name: '', dosage: '', frequency: '', duration: '' }]);
-  };
-
-  const handleRemoveMedicine = (index) => {
-    setMedicines(medicines.filter((_, i) => i !== index));
-  };
-
-  const handleMedicineChange = (index, field, value) => {
-    const updated = [...medicines];
-    updated[index][field] = value;
-    setMedicines(updated);
-  };
-
-  // POST /api/booking/prescription/:appointmentId
+  // Step 2: Save Encrypted Structured Prescription (automatically appears in Patient Health Vault)
   const handleSavePrescription = async (e) => {
     e.preventDefault();
-    if (!activeRxPatient) return;
+    if (!modalAppt) return;
 
-    const validMedicines = medicines
-      .map((m) => ({
-        name: m.name.trim(),
-        dosage: m.dosage.trim(),
-        frequency: m.frequency.trim(),
-        duration: m.duration.trim(),
-      }))
-      .filter((m) => m.name !== '');
-
-    if (validMedicines.length === 0) {
-      setRxStatus({ type: 'error', text: 'Please add at least one medication.' });
+    const validMeds = medicines.filter(
+      (m) => m.name.trim() && m.dosage.trim() && m.frequency.trim() && m.duration.trim()
+    );
+    if (validMeds.length === 0) {
+      setModalError('Please fill in Name, Dosage, Frequency, and Duration for at least one medicine.');
       return;
     }
 
-    setSubmittingRx(true);
-    setRxStatus(null);
-
-    const apptId = activeRxPatient._id || activeRxPatient.id;
+    setSubmittingModal(true);
+    setModalError('');
     try {
-      const res = await api.post(`/booking/prescription/${apptId}`, {
-        medicines: validMedicines,
+      await api.post(`/booking/prescription/${modalAppt.id}`, {
+        medicines: validMeds,
       });
-      const version = res.data?.data?.version || 1;
-      setRxStatus({
-        type: 'success',
-        text: `Prescription (v${version}) encrypted and saved for ${activeRxPatient.patientName}.`,
-      });
+      setModalSuccess('Encrypted prescription saved to the patient’s Health Vault!');
       setTimeout(() => {
-        setRxStatus(null);
-        setActiveRxPatient(null);
-        setMedicines([{ name: '', dosage: '', frequency: '', duration: '' }]);
-      }, 1800);
+        closeModal();
+      }, 900);
     } catch (err) {
-      const msg =
-        err.response?.data?.message ||
-        err.response?.data?.error ||
-        'Failed to save prescription. Ensure all medicine fields are filled and the appointment is marked completed.';
-      setRxStatus({ type: 'error', text: msg });
+      setModalError(err.response?.data?.message || 'Could not save prescription.');
     } finally {
-      setSubmittingRx(false);
+      setSubmittingModal(false);
     }
   };
 
-  const displayedList = activeTab === 'upcoming' ? upcomingAppts : completedAppts;
+  const updateMedicineField = (index, field, value) => {
+    setMedicines((prev) =>
+      prev.map((row, idx) => (idx === index ? { ...row, [field]: value } : row))
+    );
+  };
+
+  const displayedList = activeTab === 'active' ? activeQueue : completedList;
 
   return (
     <motion.main
@@ -183,8 +197,8 @@ const DoctorDashboard = () => {
         style={{
           display: 'flex',
           flexWrap: 'wrap',
-          justifyContent: 'space-between',
           alignItems: 'flex-end',
+          justifyContent: 'space-between',
           gap: '20px',
           marginBottom: '32px',
         }}
@@ -209,16 +223,13 @@ const DoctorDashboard = () => {
             <span>SPECIALIST CLINICAL CONSOLE • {timezone}</span>
           </div>
 
-          <h1
-            className="hero-display-title"
-            style={{ fontSize: 'clamp(2.2rem, 3.8vw, 3.2rem)' }}
-          >
-            {user?.name ? `${user.name}’s Console` : 'Clinical Console'}.
+          <h1 className="hero-display-title" style={{ fontSize: 'clamp(2.2rem, 3.8vw, 3.2rem)' }}>
+            {user?.name ? `${user.name}’s Console.` : 'Clinical Console.'}
           </h1>
         </div>
 
         <Link to="/doctor/schedule" className="btn-cream-pill">
-          <Sliders size={16} />
+          <Sliders size={15} />
           <span>Configure Weekly Schedule</span>
           <span className="arrow-cycle-box">
             <span className="arrow-icon-primary">↗</span>
@@ -227,7 +238,7 @@ const DoctorDashboard = () => {
         </Link>
       </div>
 
-      {/* Overview Cards */}
+      {/* 3 Clean Summary Stat Cards */}
       <div className="dashboard-stats-grid">
         <div className="dashboard-stat-card">
           <div>
@@ -235,7 +246,7 @@ const DoctorDashboard = () => {
               Active / Upcoming Queue
             </div>
             <div style={{ fontSize: '28px', fontWeight: 600, color: '#ffffff', marginTop: '4px' }}>
-              {upcomingAppts.length}
+              {activeQueue.length}
             </div>
           </div>
           <div
@@ -260,7 +271,7 @@ const DoctorDashboard = () => {
               Completed Consultations
             </div>
             <div style={{ fontSize: '28px', fontWeight: 600, color: '#ffffff', marginTop: '4px' }}>
-              {completedAppts.length}
+              {completedList.length}
             </div>
           </div>
           <div
@@ -279,64 +290,55 @@ const DoctorDashboard = () => {
           </div>
         </div>
 
-        <div className="dashboard-stat-card">
+        <Link
+          to="/doctor/analytics"
+          className="dashboard-stat-card"
+          style={{ textDecoration: 'none' }}
+        >
           <div>
-            <div style={{ fontSize: '13px', color: 'var(--cream-soft)' }}>
-              Weekly Slot Rules
+            <div style={{ fontSize: '13px', color: 'var(--cream-soft)' }}>This Week’s Earnings</div>
+            <div style={{ fontSize: '26px', fontWeight: 600, color: '#ffffff', marginTop: '4px' }}>
+              {formatRupees(weeklyEarnings)}
             </div>
-            <Link
-              to="/doctor/schedule"
-              style={{
-                display: 'inline-block',
-                fontSize: '14.5px',
-                fontWeight: 500,
-                color: 'var(--cream)',
-                marginTop: '8px',
-                textDecoration: 'underline',
-              }}
-            >
-              Manage hours & modes ↗
-            </Link>
+            <div style={{ fontSize: '12px', color: '#d8f3e5', marginTop: '2px' }}>
+              View Analytics & Ledger ↗
+            </div>
           </div>
           <div
             style={{
               width: '44px',
               height: '44px',
               borderRadius: '13px',
-              background: 'rgba(255, 255, 255, 0.12)',
+              background: 'rgba(132, 181, 159, 0.18)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: 'var(--cream)',
+              color: '#d8f3e5',
             }}
           >
-            <Calendar size={20} />
+            <IndianRupee size={20} />
           </div>
-        </div>
+        </Link>
       </div>
 
-      {/* Tab Switcher: Active Queue vs Completed Consultations */}
+      {/* Segmented Tabs: Active Queue vs Completed */}
       <div
         className="auth-segmented-track"
-        style={{
-          gridTemplateColumns: '1fr 1fr',
-          maxWidth: '400px',
-          marginBottom: '22px',
-        }}
+        style={{ gridTemplateColumns: '1fr 1fr', maxWidth: '340px', marginBottom: '24px' }}
       >
         <button
           type="button"
-          onClick={() => setActiveTab('upcoming')}
-          className={`auth-segment-btn ${activeTab === 'upcoming' ? 'active' : ''}`}
+          onClick={() => setActiveTab('active')}
+          className={`auth-segment-btn ${activeTab === 'active' ? 'active' : ''}`}
         >
-          {activeTab === 'upcoming' && (
+          {activeTab === 'active' && (
             <motion.span
-              layoutId="doc-tab-pill"
+              layoutId="doctor-tab-pill"
               className="auth-segment-pill-cream"
               transition={{ type: 'spring', stiffness: 400, damping: 32 }}
             />
           )}
-          <span>Active Queue ({upcomingAppts.length})</span>
+          <span>Active Queue ({activeQueue.length})</span>
         </button>
 
         <button
@@ -346,58 +348,32 @@ const DoctorDashboard = () => {
         >
           {activeTab === 'completed' && (
             <motion.span
-              layoutId="doc-tab-pill"
+              layoutId="doctor-tab-pill"
               className="auth-segment-pill-cream"
               transition={{ type: 'spring', stiffness: 400, damping: 32 }}
             />
           )}
-          <span>Completed ({completedAppts.length})</span>
+          <span>Completed ({completedList.length})</span>
         </button>
       </div>
 
-      <AnimatePresence>
-        {actionError && (
-          <motion.div
-            initial={{ opacity: 0, y: -6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            style={{
-              padding: '12px 16px',
-              borderRadius: '12px',
-              background: 'rgba(217, 107, 107, 0.16)',
-              border: '1px solid rgba(217, 107, 107, 0.38)',
-              color: '#ffd6d6',
-              fontSize: '13.5px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              marginBottom: '18px',
-            }}
-          >
-            <AlertCircle size={16} />
-            <span>{actionError}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
+      {/* Queue List */}
       {loading ? (
         <div className="glass-card" style={{ padding: '40px' }}>
           <div style={{ fontSize: '15px', color: 'var(--cream-soft)' }}>
-            Loading your patient appointments...
+            Loading your clinical queue...
           </div>
         </div>
       ) : displayedList.length > 0 ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {displayedList.map((appt, idx) => {
-            const apptId = appt._id || appt.id || idx;
-            const patientName =
-              appt.patientId?.name || appt.patient?.name || appt.patientName || 'Verified Patient';
-            const mode = String(appt.mode || appt.slotId?.mode || 'video').toLowerCase();
-            const isVideo = !mode.includes('person') && !mode.includes('clinic');
+          {displayedList.map((appt) => {
+            const isVideo = appt.mode === 'video';
+            const pay = appt.payment || {};
+            const isPaid = Boolean(pay.isPaid);
 
             return (
-              <div key={apptId} className="appointment-row-card">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <div key={appt.id} className="appointment-row-card">
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
                   <div
                     style={{
                       width: '46px',
@@ -409,19 +385,45 @@ const DoctorDashboard = () => {
                       alignItems: 'center',
                       justifyContent: 'center',
                       flexShrink: 0,
+                      marginTop: '2px',
                     }}
                   >
-                    <User size={21} />
+                    <User size={20} />
                   </div>
 
                   <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <span style={{ fontSize: '17.5px', fontWeight: 500, color: '#ffffff' }}>
-                        {patientName}
-                      </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                      <h3 style={{ fontSize: '17.5px', fontWeight: 500, color: '#ffffff' }}>
+                        {appt.patientName}
+                      </h3>
+
                       <span className="qualification-tag-pill">
                         {isVideo ? <Video size={11} /> : <Building2 size={11} />}
                         <span>{isVideo ? 'Video Consult' : 'In-Person Visit'}</span>
+                      </span>
+
+                      {/* Live Payment Badge */}
+                      <span
+                        className="qualification-tag-pill"
+                        style={{
+                          background: isPaid
+                            ? 'rgba(132, 181, 159, 0.18)'
+                            : 'rgba(243, 239, 230, 0.12)',
+                          borderColor: isPaid
+                            ? 'rgba(132, 181, 159, 0.4)'
+                            : 'rgba(243, 239, 230, 0.25)',
+                          color: isPaid ? '#d8f3e5' : 'var(--cream)',
+                        }}
+                      >
+                        <CreditCard size={11} />
+                        <span>
+                          {formatRupees(pay.amount)} •{' '}
+                          {pay.status === 'captured'
+                            ? 'Paid'
+                            : pay.status === 'waived'
+                            ? 'Waived'
+                            : 'Pending (Pay Later)'}
+                        </span>
                       </span>
                     </div>
 
@@ -429,64 +431,73 @@ const DoctorDashboard = () => {
                       style={{
                         fontSize: '13.5px',
                         color: 'var(--cream-soft)',
-                        marginTop: '4px',
+                        marginTop: '5px',
                         display: 'flex',
                         flexWrap: 'wrap',
-                        gap: '12px',
+                        gap: '10px',
                       }}
                     >
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                         <Clock size={13} />
-                        {formatSlotDisplay(appt)}
+                        {formatDateShort(appt.startAt)} • {appt.slotTime}
                       </span>
-                      {(appt.reason || appt.notes) && (
-                        <span>• Note: {appt.reason || appt.notes}</span>
+                      {pay.method && (
+                        <>
+                          <span>•</span>
+                          <span>Method: {pay.method}</span>
+                        </>
+                      )}
+                      {pay.transactionId && (
+                        <>
+                          <span>•</span>
+                          <span style={{ color: 'var(--cream-muted)' }}>
+                            Ref: {pay.transactionId}
+                          </span>
+                        </>
                       )}
                     </div>
+
+                    {appt.reason && (
+                      <div style={{ fontSize: '12.5px', color: 'var(--cream)', marginTop: '6px' }}>
+                        Note: {appt.reason}
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {/* Actions: Active Queue vs Completed */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                  {activeTab === 'upcoming' ? (
+                  {activeTab === 'active' ? (
                     <>
-                      <button
-                        type="button"
-                        onClick={() => handleMarkComplete(appt)}
-                        className="nav-login-btn"
-                        style={{ gap: '6px' }}
-                        title="Mark elapsed appointment as completed to issue prescription"
-                      >
-                        <CheckCircle2 size={15} />
-                        <span>Mark Completed</span>
-                      </button>
-
                       {isVideo && (
                         <button
                           type="button"
-                          onClick={() => navigate(`/video/${apptId}`)}
+                          onClick={() => navigate(`/video/${appt.id}`)}
                           className="btn-cream-pill"
-                          style={{ padding: '10px 20px', fontSize: '13.5px' }}
+                          style={{ padding: '9px 18px', fontSize: '13px' }}
                         >
-                          <Video size={15} />
-                          <span>Launch Call</span>
-                          <span>↗</span>
+                          <Video size={14} />
+                          <span>Join Video Room</span>
                         </button>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => openCompleteModal(appt)}
+                        className="nav-login-btn"
+                        style={{ padding: '9px 16px', fontSize: '13px', gap: '6px' }}
+                      >
+                        <CheckCircle2 size={14} />
+                        <span>Mark Completed</span>
+                      </button>
                     </>
                   ) : (
                     <button
                       type="button"
-                      onClick={() => {
-                        setRxStatus(null);
-                        setActiveRxPatient({ ...appt, patientName });
-                      }}
+                      onClick={() => openPrescriptionModal(appt)}
                       className="btn-cream-pill"
-                      style={{ padding: '10px 20px', fontSize: '13.5px' }}
+                      style={{ padding: '9px 18px', fontSize: '13px' }}
                     >
-                      <FileCheck2 size={15} />
-                      <span>Write / Revise Prescription</span>
-                      <span>↗</span>
+                      <FileText size={14} />
+                      <span>Issue / Edit Prescription</span>
                     </button>
                   )}
                 </div>
@@ -497,193 +508,310 @@ const DoctorDashboard = () => {
       ) : (
         <div
           className="glass-card"
-          style={{
-            padding: '48px',
-            textAlign: 'center',
-            maxWidth: '580px',
-            margin: '16px auto',
-          }}
+          style={{ padding: '44px', textAlign: 'center', maxWidth: '540px', margin: '16px auto' }}
         >
-          <h3 style={{ fontSize: '20px', fontWeight: 500, color: '#ffffff', marginBottom: '8px' }}>
-            {activeTab === 'upcoming'
-              ? 'No active appointments in your queue'
-              : 'No completed appointments yet'}
+          <h3 style={{ fontSize: '19px', fontWeight: 500, color: '#ffffff', marginBottom: '8px' }}>
+            {activeTab === 'active'
+              ? 'No patients in your active queue'
+              : 'No completed consultations yet'}
           </h3>
-          <p style={{ fontSize: '14.5px', color: 'var(--cream-soft)', marginBottom: '24px' }}>
-            {activeTab === 'upcoming'
-              ? 'Publish your weekly availability in the Schedule Builder so patients can reserve slots.'
-              : 'Mark an active consultation as completed after it ends to issue an encrypted prescription.'}
+          <p style={{ fontSize: '14px', color: 'var(--cream-soft)' }}>
+            {activeTab === 'active'
+              ? 'New confirmed bookings from patients will appear here automatically.'
+              : 'Once you mark a visit completed, you can issue encrypted digital prescriptions here.'}
           </p>
-          {activeTab === 'upcoming' && (
-            <Link to="/doctor/schedule" className="btn-cream-pill">
-              <span>Open Schedule Builder</span>
-              <span className="arrow-cycle-box">
-                <span className="arrow-icon-primary">↗</span>
-                <span className="arrow-icon-clone">↗</span>
-              </span>
-            </Link>
-          )}
         </div>
       )}
 
-      {/* Structured Digital Prescription Drawer (POST /api/booking/prescription/:appointmentId) */}
+      {/* 2-STEP MODAL: STEP 1 (COMPLETE & PAYMENT) -> STEP 2 (DIGITAL PRESCRIPTION) */}
       <AnimatePresence>
-        {activeRxPatient && (
+        {modalAppt && (
           <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 12 }}
-            className="glass-card"
-            style={{ marginTop: '28px', padding: '28px' }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={closeModal}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(6, 11, 22, 0.74)',
+              backdropFilter: 'blur(8px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '20px',
+              zIndex: 200,
+            }}
           >
-            <div
+            <motion.div
+              initial={{ opacity: 0, y: 16, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12, scale: 0.97 }}
+              onClick={(e) => e.stopPropagation()}
+              className="glass-card"
               style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: '20px',
+                width: '100%',
+                maxWidth: '680px',
+                padding: '32px',
+                maxHeight: '88vh',
+                overflowY: 'auto',
               }}
             >
-              <div>
-                <h3 style={{ fontSize: '18px', fontWeight: 500, color: '#ffffff' }}>
-                  Structured Prescription for {activeRxPatient.patientName}
-                </h3>
-                <p style={{ fontSize: '12.5px', color: 'var(--cream-muted)', marginTop: '2px' }}>
-                  Add 1–30 medication rows. Data is encrypted by the backend upon submission.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveRxPatient(null)}
-                className="nav-login-btn"
-                style={{ padding: '6px 12px', fontSize: '12px' }}
-              >
-                Close
-              </button>
-            </div>
-
-            {rxStatus && (
               <div
                 style={{
-                  padding: '13px 16px',
-                  borderRadius: '12px',
-                  background:
-                    rxStatus.type === 'error'
-                      ? 'rgba(217, 107, 107, 0.16)'
-                      : 'rgba(132, 181, 159, 0.18)',
-                  color: rxStatus.type === 'error' ? '#ffd6d6' : '#d8f3e5',
                   display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  marginBottom: '16px',
-                  fontSize: '13.5px',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  marginBottom: '18px',
                 }}
               >
-                {rxStatus.type === 'error' ? (
-                  <AlertCircle size={16} />
-                ) : (
-                  <CheckCircle2 size={16} />
-                )}
-                <span>{rxStatus.text}</span>
-              </div>
-            )}
-
-            <form
-              onSubmit={handleSavePrescription}
-              style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}
-            >
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <label className="auth-input-label">Prescribed Medications</label>
-                {medicines.map((med, index) => (
-                  <div
-                    key={index}
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: '2fr 1fr 1fr 1fr auto',
-                      gap: '10px',
-                      alignItems: 'center',
-                    }}
-                  >
-                    <input
-                      type="text"
-                      placeholder="Medicine Name (e.g. Paracetamol)"
-                      value={med.name}
-                      onChange={(e) => handleMedicineChange(index, 'name', e.target.value)}
-                      className="auth-input-field"
-                      required
-                    />
-                    <input
-                      type="text"
-                      placeholder="Dosage (e.g. 500mg)"
-                      value={med.dosage}
-                      onChange={(e) => handleMedicineChange(index, 'dosage', e.target.value)}
-                      className="auth-input-field"
-                      required
-                    />
-                    <input
-                      type="text"
-                      placeholder="Frequency (e.g. 1-0-1)"
-                      value={med.frequency}
-                      onChange={(e) => handleMedicineChange(index, 'frequency', e.target.value)}
-                      className="auth-input-field"
-                      required
-                    />
-                    <input
-                      type="text"
-                      placeholder="Duration (e.g. 5 days)"
-                      value={med.duration}
-                      onChange={(e) => handleMedicineChange(index, 'duration', e.target.value)}
-                      className="auth-input-field"
-                      required
-                    />
-                    {medicines.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveMedicine(index)}
-                        className="nav-login-btn"
-                        style={{
-                          padding: '10px',
-                          color: 'rgba(217, 107, 107, 0.9)',
-                          borderColor: 'rgba(217, 107, 107, 0.3)',
-                        }}
-                        title="Remove row"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    )}
+                <div>
+                  <div style={{ fontSize: '11.5px', letterSpacing: '0.07em', color: 'var(--cream-muted)' }}>
+                    {modalStep === 'complete'
+                      ? 'STEP 1 OF 2 • COMPLETE CONSULTATION'
+                      : 'STEP 2 OF 2 • ENCRYPTED DIGITAL PRESCRIPTION'}
                   </div>
-                ))}
+                  <h2 style={{ fontSize: '22px', fontWeight: 500, color: '#ffffff', marginTop: '4px' }}>
+                    {modalStep === 'complete'
+                      ? `Complete visit with ${modalAppt.patientName}`
+                      : `Prescription for ${modalAppt.patientName}`}
+                  </h2>
+                </div>
 
                 <button
                   type="button"
-                  onClick={handleAddMedicine}
-                  className="time-slot-btn secondary"
-                  style={{
-                    width: 'fit-content',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    marginTop: '4px',
-                  }}
+                  onClick={closeModal}
+                  className="nav-login-btn"
+                  style={{ padding: '8px' }}
                 >
-                  <Plus size={14} />
-                  <span>Add another medicine</span>
+                  <X size={16} />
                 </button>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '6px' }}>
-                <button
-                  type="submit"
-                  disabled={submittingRx}
-                  className="btn-cream-pill"
+              {modalError && (
+                <div
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: '12px',
+                    background: 'rgba(217, 107, 107, 0.16)',
+                    border: '1px solid rgba(217, 107, 107, 0.38)',
+                    color: '#ffd6d6',
+                    fontSize: '13px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    marginBottom: '16px',
+                  }}
                 >
-                  <span>
-                    {submittingRx ? 'Saving Prescription...' : 'Save Encrypted Prescription'}
-                  </span>
-                  <span>↗</span>
-                </button>
-              </div>
-            </form>
+                  <AlertCircle size={15} />
+                  <span>{modalError}</span>
+                </div>
+              )}
+
+              {modalSuccess && (
+                <div
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: '12px',
+                    background: 'rgba(132, 181, 159, 0.18)',
+                    border: '1px solid rgba(132, 181, 159, 0.42)',
+                    color: '#d8f3e5',
+                    fontSize: '13px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    marginBottom: '16px',
+                  }}
+                >
+                  <CheckCircle2 size={15} />
+                  <span>{modalSuccess}</span>
+                </div>
+              )}
+
+              {modalStep === 'complete' ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                  <div className="glass-widget-inner" style={{ padding: '16px 18px', fontSize: '13.5px' }}>
+                    <div style={{ color: 'var(--cream-soft)' }}>
+                      Scheduled Slot:{' '}
+                      <strong style={{ color: '#ffffff' }}>
+                        {formatDateShort(modalAppt.startAt)} • {modalAppt.slotTime}
+                      </strong>
+                    </div>
+                    <div style={{ color: 'var(--cream-soft)', marginTop: '6px' }}>
+                      Payment Status:{' '}
+                      <strong style={{ color: modalAppt.payment?.isPaid ? '#d8f3e5' : 'var(--cream)' }}>
+                        {formatRupees(modalAppt.payment?.amount)} •{' '}
+                        {modalAppt.payment?.isPaid ? 'Already Paid' : 'Pending (Pay Later)'}
+                      </strong>
+                    </div>
+                  </div>
+
+                  {/* Optional Payment Collection for Pending Pay Later visits */}
+                  {!modalAppt.payment?.isPaid && (modalAppt.payment?.amount || 0) > 0 && (
+                    <div
+                      className="glass-widget-inner"
+                      style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '12px' }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '14px', fontWeight: 500, color: '#ffffff' }}>
+                          Mark {formatRupees(modalAppt.payment?.amount)} payment as collected now
+                        </span>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={markPaidNow}
+                          onClick={() => setMarkPaidNow((p) => !p)}
+                          className={`glass-toggle-switch ${markPaidNow ? 'is-on' : ''}`}
+                        >
+                          <span className="glass-toggle-thumb" />
+                        </button>
+                      </div>
+
+                      {markPaidNow && (
+                        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+                          {[
+                            { id: 'clinic_upi', label: 'Clinic UPI' },
+                            { id: 'cash', label: 'Cash' },
+                            { id: 'card', label: 'Card' },
+                          ].map((m) => (
+                            <button
+                              key={m.id}
+                              type="button"
+                              onClick={() => setCollectedMethod(m.id)}
+                              className={`time-slot-btn ${
+                                collectedMethod === m.id ? 'primary' : 'secondary'
+                              }`}
+                              style={{ padding: '6px 12px', fontSize: '12px' }}
+                            >
+                              {m.label}
+                            </button>
+                          ))}
+                          <input
+                            type="text"
+                            placeholder="Optional UPI / Receipt Ref"
+                            value={transactionRef}
+                            onChange={(e) => setTransactionRef(e.target.value)}
+                            className="auth-input-field"
+                            style={{ flex: 1, minWidth: '180px', padding: '7px 12px', fontSize: '12.5px' }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                    <button type="button" onClick={closeModal} className="nav-login-btn">
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={submittingModal}
+                      onClick={handleConfirmComplete}
+                      className="btn-cream-pill"
+                      style={{ padding: '11px 22px' }}
+                    >
+                      <span>{submittingModal ? 'Completing...' : 'Complete Visit & Continue ↗'}</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* STEP 2: STRUCTURED ENCRYPTED PRESCRIPTION BUILDER */
+                <form onSubmit={handleSavePrescription} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <p style={{ fontSize: '13.5px', color: 'var(--cream-soft)' }}>
+                    Add prescribed medicines below. They are encrypted at rest and immediately
+                    accessible in the patient’s <strong>Health Vault</strong>.
+                  </p>
+
+                  {medicines.map((med, idx) => (
+                    <div
+                      key={idx}
+                      className="glass-widget-inner"
+                      style={{
+                        padding: '14px',
+                        display: 'grid',
+                        gridTemplateColumns: '1.3fr 1fr 1fr 1fr auto',
+                        gap: '8px',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <input
+                        type="text"
+                        placeholder="Medicine Name"
+                        value={med.name}
+                        onChange={(e) => updateMedicineField(idx, 'name', e.target.value)}
+                        className="auth-input-field"
+                        style={{ padding: '8px 10px', fontSize: '12.5px' }}
+                        required
+                      />
+                      <input
+                        type="text"
+                        placeholder="Dosage (500mg)"
+                        value={med.dosage}
+                        onChange={(e) => updateMedicineField(idx, 'dosage', e.target.value)}
+                        className="auth-input-field"
+                        style={{ padding: '8px 10px', fontSize: '12.5px' }}
+                        required
+                      />
+                      <input
+                        type="text"
+                        placeholder="Freq (1-0-1)"
+                        value={med.frequency}
+                        onChange={(e) => updateMedicineField(idx, 'frequency', e.target.value)}
+                        className="auth-input-field"
+                        style={{ padding: '8px 10px', fontSize: '12.5px' }}
+                        required
+                      />
+                      <input
+                        type="text"
+                        placeholder="Duration (5 days)"
+                        value={med.duration}
+                        onChange={(e) => updateMedicineField(idx, 'duration', e.target.value)}
+                        className="auth-input-field"
+                        style={{ padding: '8px 10px', fontSize: '12.5px' }}
+                        required
+                      />
+                      {medicines.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => setMedicines((prev) => prev.filter((_, i) => i !== idx))}
+                          className="nav-login-btn"
+                          style={{ padding: '7px' }}
+                          title="Remove row"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+
+                  {medicines.length < 30 && (
+                    <button
+                      type="button"
+                      onClick={() => setMedicines((prev) => [...prev, createEmptyMedicineRow()])}
+                      className="time-slot-btn secondary"
+                      style={{ width: 'fit-content', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                    >
+                      <Plus size={13} />
+                      <span>Add Another Medicine</span>
+                    </button>
+                  )}
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '8px' }}>
+                    <button type="button" onClick={closeModal} className="nav-login-btn">
+                      Skip for Now
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={submittingModal}
+                      className="btn-cream-pill"
+                      style={{ padding: '11px 22px' }}
+                    >
+                      <span>{submittingModal ? 'Saving...' : 'Save to Patient Health Vault'}</span>
+                    </button>
+                  </div>
+                </form>
+              )}
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

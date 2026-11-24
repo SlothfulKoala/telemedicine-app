@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Bell, LogOut } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 
@@ -14,33 +14,56 @@ const Navbar = () => {
 
   const role = user?.role || 'guest';
 
+  const brandHomeRoute =
+    role === 'doctor'
+      ? '/doctor/dashboard'
+      : role === 'patient'
+      ? '/patient/dashboard'
+      : role === 'admin'
+      ? '/admin/dashboard'
+      : '/';
+
   const navConfig = {
     guest: [
       { label: 'Overview', path: '/' },
-      { label: 'Specialties', path: '/specialties' },
-      { label: 'Security & Privacy', path: '/security' },
+      { label: 'Specialties', path: '/', chapterIndex: 0 },
+      { label: 'Security & Privacy', path: '/', chapterIndex: 3 },
     ],
     patient: [
-      { label: 'Dashboard', path: '/patient/dashboard' },
+      { label: 'My Appointments', path: '/patient/dashboard' },
       { label: 'Find Doctors', path: '/search' },
-      { label: 'My Appointments', path: '/patient/appointments' },
       { label: 'Health Vault', path: '/vault' },
     ],
     doctor: [
       { label: 'Clinical Console', path: '/doctor/dashboard' },
       { label: 'Schedule Builder', path: '/doctor/schedule' },
-      { label: 'Patient Queue', path: '/doctor/queue' },
-      { label: 'Payouts', path: '/doctor/payouts' },
+      { label: 'Earnings & Analytics', path: '/doctor/analytics' },
     ],
     admin: [
-      { label: 'System Overview', path: '/admin/dashboard' },
-      { label: 'Doctor Verification', path: '/admin/verify' },
-      { label: 'Slot Transactions', path: '/admin/transactions' },
-      { label: 'Audit Logs', path: '/admin/logs' },
+      { label: 'Admin Console', path: '/admin/dashboard' },
+      { label: 'Specialist Directory', path: '/search' },
     ],
   };
 
   const links = navConfig[role] || navConfig.guest;
+
+  const handleNavClick = (e, item) => {
+    if (typeof item.chapterIndex === 'number') {
+      e.preventDefault();
+      if (location.pathname !== '/') {
+        navigate('/');
+        setTimeout(() => {
+          window.dispatchEvent(
+            new CustomEvent('vitalise:scroll-chapter', { detail: item.chapterIndex })
+          );
+        }, 120);
+      } else {
+        window.dispatchEvent(
+          new CustomEvent('vitalise:scroll-chapter', { detail: item.chapterIndex })
+        );
+      }
+    }
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -61,9 +84,9 @@ const Navbar = () => {
         zIndex: 40,
       }}
     >
-      {/* Left: Brand Pulse Logo */}
+      {/* Left: Brand Pulse Logo (Routes to role's home dashboard) */}
       <Link
-        to="/"
+        to={brandHomeRoute}
         onMouseEnter={() => setPulseKey((prev) => prev + 1)}
         style={{
           display: 'inline-flex',
@@ -106,13 +129,18 @@ const Navbar = () => {
         onMouseLeave={() => setHoveredTab(null)}
       >
         {links.map((item) => {
-          const isActive = location.pathname === item.path;
+          const isChapterLink = typeof item.chapterIndex === 'number';
+          const isActive =
+            !isChapterLink &&
+            (location.pathname === item.path ||
+              (item.path === '/search' && location.pathname.startsWith('/patient/checkout')));
           const isHovered = hoveredTab === item.label;
 
           return (
             <Link
               key={item.label}
               to={item.path}
+              onClick={(e) => handleNavClick(e, item)}
               onMouseEnter={() => setHoveredTab(item.label)}
               className={`glass-nav-link ${isActive ? 'active' : ''}`}
             >
@@ -153,7 +181,7 @@ const Navbar = () => {
         })}
       </nav>
 
-      {/* Right: Log In & Sign Up ↗ Buttons */}
+      {/* Right: Role Status & Auth Controls */}
       <div
         style={{
           display: 'flex',
@@ -164,7 +192,8 @@ const Navbar = () => {
       >
         {role === 'doctor' && (
           <button
-            onClick={() => setAccepting(!accepting)}
+            type="button"
+            onClick={() => setAccepting((prev) => !prev)}
             className="glass-nav-pill"
             style={{
               padding: '7px 14px',
@@ -187,24 +216,15 @@ const Navbar = () => {
         )}
 
         {user ? (
-          <>
-            <button
-              className="circle-btn-glass"
-              title="Notifications"
-              style={{ width: '40px' }}
-            >
-              <Bell size={16} />
-            </button>
-
-            <button
-              onClick={handleLogout}
-              className="nav-login-btn"
-              style={{ gap: '6px' }}
-            >
-              <span>Sign Out</span>
-              <LogOut size={14} />
-            </button>
-          </>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="nav-login-btn"
+            style={{ gap: '6px' }}
+          >
+            <span>Sign Out</span>
+            <LogOut size={14} />
+          </button>
         ) : (
           <>
             <Link to="/login?mode=login" className="nav-login-btn">

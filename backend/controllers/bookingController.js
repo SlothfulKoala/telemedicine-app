@@ -616,9 +616,86 @@ async function cancelPatientAppointment(req, res) {
   }
 }
 
+async function getPatientPrescriptions(req, res) {
+  const prescriptionDocs = await Prescription.find({
+    patientId: req.auth.userId,
+  })
+    .populate({
+      path: 'doctorId',
+      select: 'userId specialisations city clinicAddress regNumber',
+      populate: [
+        { path: 'userId', select: 'name' },
+        { path: 'specialisations', select: 'name' },
+      ],
+    })
+    .populate({
+      path: 'appointmentId',
+      select: 'startAt mode status',
+    })
+    .sort({ updatedAt: -1 })
+    .limit(100);
+
+  const data = prescriptionDocs.map((doc) => {
+    const rx = doc.toObject({ getters: true });
+    let medicines = [];
+    try {
+      const parsed = JSON.parse(rx.medicinesJson || '[]');
+      if (Array.isArray(parsed)) medicines = parsed;
+    } catch (e) {
+      medicines = [];
+    }
+
+    return {
+      id: rx._id.toString(),
+      appointmentId: rx.appointmentId?._id?.toString() || rx.appointmentId?.toString(),
+      version: rx.version || 1,
+      issuedAt: rx.updatedAt || rx.createdAt,
+      visitDate: rx.appointmentId?.startAt || rx.createdAt,
+      mode: rx.appointmentId?.mode || 'video',
+      doctorName: rx.doctorId?.userId?.name || 'Verified Specialist',
+      specialisation: rx.doctorId?.specialisations?.[0]?.name || 'Specialist',
+      regNumber: rx.doctorId?.regNumber || '',
+      clinicAddress: [rx.doctorId?.clinicAddress, rx.doctorId?.city].filter(Boolean).join(', '),
+      medicines,
+    };
+  });
+
+  return res.json({
+    success: true,
+    count: data.length,
+    prescriptions: data,
+    data,
+  });
+}
+
+function formatPaymentSummary(paymentDoc) {
+  if (!paymentDoc || typeof paymentDoc !== 'object') {
+    return {
+      status: 'pending',
+      method: 'pay_later',
+      provider: 'pay_later',
+      transactionId: null,
+      amount: 0,
+      currency: 'INR',
+      isPaid: false,
+    };
+  }
+
+  const status = String(paymentDoc.status || 'pending').toLowerCase();
+  return {
+    status,
+    method: paymentDoc.paymentMethod || paymentDoc.provider || 'pay_later',
+    provider: paymentDoc.provider || 'pay_later',
+    transactionId: paymentDoc.providerPaymentId || paymentDoc.providerOrderId || paymentDoc._id?.toString() || null,
+    amount: Number(paymentDoc.amount || 0),
+    currency: paymentDoc.currency || 'INR',
+    isPaid: status === 'captured' || status === 'waived',
+  };
+}
+
 async function getDoctorAppointments(req, res) {
   const doctorProfile = await DoctorProfile.findOne({ userId: req.auth.userId })
-    .select('_id timezone')
+    .select('_id timezone stats')
     .lean();
 
   if (!doctorProfile) {
@@ -631,14 +708,19 @@ async function getDoctorAppointments(req, res) {
     doctorId: doctorProfile._id,
     status: { $in: ['confirmed', 'in_progress'] },
   })
-    .select('patientId startAt endAt mode status reason __enc_reason')
+    .select('patientId paymentId startAt endAt mode status reason __enc_reason')
     .populate({ path: 'patientId', select: 'name' })
+    .populate({
+      path: 'paymentId',
+      select: 'status paymentMethod provider providerOrderId providerPaymentId amount currency',
+    })
     .sort({ startAt: 1 })
     .limit(100);
 
   const timezone = doctorProfile.timezone || 'Asia/Kolkata';
   return res.json({
     timezone,
+    stats: doctorProfile.stats || { totalConsults: 0, totalEarnings: 0 },
     appointments: appointments.map((doc) => {
       const appointment = doc.toObject({ getters: true });
       const cleanReason = typeof appointment.reason === 'string' ? appointment.reason.trim() : '';
@@ -651,6 +733,7 @@ async function getDoctorAppointments(req, res) {
         mode: appointment.mode,
         status: appointment.status,
         reason: cleanReason || undefined,
+        payment: formatPaymentSummary(appointment.paymentId),
       };
     }),
   });
@@ -658,7 +741,7 @@ async function getDoctorAppointments(req, res) {
 
 async function getCompletedDoctorAppointments(req, res) {
   const doctorProfile = await DoctorProfile.findOne({ userId: req.auth.userId })
-    .select('_id timezone')
+    .select('_id timezone stats')
     .lean();
 
   if (!doctorProfile) {
@@ -671,14 +754,19 @@ async function getCompletedDoctorAppointments(req, res) {
     doctorId: doctorProfile._id,
     status: 'completed',
   })
-    .select('patientId startAt endAt mode status reason __enc_reason')
+    .select('patientId paymentId startAt endAt mode status reason __enc_reason')
     .populate({ path: 'patientId', select: 'name' })
+    .populate({
+      path: 'paymentId',
+      select: 'status paymentMethod provider providerOrderId providerPaymentId amount currency',
+    })
     .sort({ startAt: -1 })
     .limit(100);
   const timezone = doctorProfile.timezone || 'Asia/Kolkata';
 
   return res.json({
     timezone,
+    stats: doctorProfile.stats || { totalConsults: 0, totalEarnings: 0 },
     appointments: appointments.map((doc) => {
       const appointment = doc.toObject({ getters: true });
       const cleanReason = typeof appointment.reason === 'string' ? appointment.reason.trim() : '';
@@ -691,6 +779,7 @@ async function getCompletedDoctorAppointments(req, res) {
         mode: appointment.mode,
         status: appointment.status,
         reason: cleanReason || undefined,
+        payment: formatPaymentSummary(appointment.paymentId),
       };
     }),
   });
@@ -698,6 +787,8 @@ async function getCompletedDoctorAppointments(req, res) {
 
 async function completeDoctorAppointment(req, res) {
   const { appointmentId } = req.params;
+  const { markPaid = false, collectedMethod, transactionRef } = req.body || {};
+
   if (!mongoose.isValidObjectId(appointmentId)) {
     return res.status(400).json({ success: false, message: 'A valid appointment ID is required.' });
   }
@@ -714,15 +805,24 @@ async function completeDoctorAppointment(req, res) {
   if (!appointment) {
     return res.status(404).json({ success: false, message: 'Appointment not found.' });
   }
+
   if (appointment.status === 'completed') {
-    return res.json({ success: true, appointmentId: appointment._id, status: appointment.status });
+    const existingPay = await Payment.findOne({ appointmentId: appointment._id }).lean();
+    return res.json({
+      success: true,
+      appointmentId: appointment._id,
+      status: appointment.status,
+      payment: formatPaymentSummary(existingPay),
+    });
   }
+
   if (!['confirmed', 'in_progress'].includes(appointment.status)) {
     return res.status(409).json({
       success: false,
       message: 'Only confirmed or in-progress appointments can be completed.',
     });
   }
+
   if (appointment.endAt > new Date()) {
     return res.status(409).json({
       success: false,
@@ -733,7 +833,56 @@ async function completeDoctorAppointment(req, res) {
   appointment.status = 'completed';
   await appointment.save();
 
-  return res.json({ success: true, appointmentId: appointment._id, status: appointment.status });
+  const payment = await Payment.findOne({ appointmentId: appointment._id }).lean();
+  let earnedIncrement = 0;
+
+  if (payment) {
+    if (payment.status === 'captured' || payment.status === 'waived') {
+      earnedIncrement = Number(payment.amount || 0);
+    } else if (markPaid && payment.status === 'pending') {
+      const paymentUpdate = {
+        status: 'captured',
+      };
+
+      // Payment.js allows only ['razorpay', 'stripe', 'pay_later'] for paymentMethod
+      const allowedMethods = ['razorpay', 'stripe', 'pay_later'];
+      const normalizedMethod = String(collectedMethod || '').trim().toLowerCase();
+      if (allowedMethods.includes(normalizedMethod)) {
+        paymentUpdate.paymentMethod = normalizedMethod;
+      }
+
+      if (typeof transactionRef === 'string' && transactionRef.trim()) {
+        paymentUpdate.providerPaymentId = transactionRef.trim();
+      }
+
+      await Payment.updateOne(
+        { _id: payment._id },
+        { $set: paymentUpdate },
+        { runValidators: true }
+      );
+
+      earnedIncrement = Number(payment.amount || 0);
+    }
+  }
+
+  await DoctorProfile.updateOne(
+    { _id: doctorProfile._id },
+    {
+      $inc: {
+        'stats.totalConsults': 1,
+        'stats.totalEarnings': earnedIncrement,
+      },
+    }
+  );
+
+  const updatedPayment = await Payment.findOne({ appointmentId: appointment._id }).lean();
+
+  return res.json({
+    success: true,
+    appointmentId: appointment._id,
+    status: appointment.status,
+    payment: formatPaymentSummary(updatedPayment),
+  });
 }
 
 async function savePrescription(req, res) {
@@ -854,6 +1003,195 @@ async function savePrescription(req, res) {
   });
 }
 
+async function getDoctorAnalytics(req, res) {
+  const doctorProfile = await DoctorProfile.findOne({ userId: req.auth.userId })
+    .select('_id timezone stats')
+    .lean();
+
+  if (!doctorProfile) {
+    return res.status(404).json({
+      success: false,
+      message: 'Complete your doctor profile to view analytics.',
+    });
+  }
+
+  const timezone = doctorProfile.timezone || 'Asia/Kolkata';
+  const now = new Date();
+  const sevenDaysAgo = new Date(now);
+  sevenDaysAgo.setDate(now.getDate() - 6);
+  sevenDaysAgo.setHours(0, 0, 0, 0);
+
+  const [
+    paymentTotals,
+    weeklyRevenueAgg,
+    appointmentStatusAgg,
+    modeSplitAgg,
+    weeklyBookingsAgg,
+    recentPaymentsRaw,
+  ] = await Promise.all([
+    // 1. Lifetime captured earnings & pending Pay Later dues
+    Payment.aggregate([
+      { $match: { doctorId: doctorProfile._id } },
+      {
+        $group: {
+          _id: '$status',
+          totalAmount: { $sum: '$amount' },
+          count: { $sum: 1 },
+        },
+      },
+    ]),
+
+    // 2. Daily captured revenue over the last 7 days
+    Payment.aggregate([
+      {
+        $match: {
+          doctorId: doctorProfile._id,
+          status: 'captured',
+          updatedAt: { $gte: sevenDaysAgo },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: { format: '%Y-%m-%d', date: '$updatedAt', timezone },
+          },
+          earnings: { $sum: '$amount' },
+        },
+      },
+    ]),
+
+    // 3. Appointment counts by status (for completion rate)
+    Appointment.aggregate([
+      {
+        $match: {
+          doctorId: doctorProfile._id,
+          status: { $nin: ['held', 'expired'] },
+        },
+      },
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 },
+        },
+      },
+    ]),
+
+    // 4. Video vs. In-Clinic split
+    Appointment.aggregate([
+      {
+        $match: {
+          doctorId: doctorProfile._id,
+          status: { $in: ['confirmed', 'in_progress', 'completed'] },
+        },
+      },
+      {
+        $group: {
+          _id: '$mode',
+          count: { $sum: 1 },
+        },
+      },
+    ]),
+
+    // 5. Daily booking volume over the last 7 days
+    Appointment.aggregate([
+      {
+        $match: {
+          doctorId: doctorProfile._id,
+          status: { $in: ['confirmed', 'in_progress', 'completed'] },
+          createdAt: { $gte: sevenDaysAgo },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone },
+          },
+          bookings: { $sum: 1 },
+        },
+      },
+    ]),
+
+    // 6. Recent payment ledger
+    Payment.find({ doctorId: doctorProfile._id })
+      .select('appointmentId patientId status paymentMethod provider providerOrderId providerPaymentId amount currency createdAt updatedAt')
+      .populate({ path: 'patientId', select: 'name' })
+      .populate({ path: 'appointmentId', select: 'startAt mode status' })
+      .sort({ createdAt: -1 })
+      .limit(15)
+      .lean(),
+  ]);
+
+  const payMap = Object.fromEntries(paymentTotals.map((p) => [p._id, p.totalAmount]));
+  const statusMap = Object.fromEntries(appointmentStatusAgg.map((s) => [s._id, s.count]));
+  const modeMap = Object.fromEntries(modeSplitAgg.map((m) => [m._id, m.count]));
+  const revByDay = Object.fromEntries(weeklyRevenueAgg.map((r) => [r._id, r.earnings]));
+  const bookingsByDay = Object.fromEntries(weeklyBookingsAgg.map((b) => [b._id, b.bookings]));
+
+  // Build continuous 7-day rolling timeline (zero-filled)
+  const weeklyTrends = [];
+  let weeklyEarnings = 0;
+  for (let i = 6; i >= 0; i -= 1) {
+    const d = new Date(now);
+    d.setDate(now.getDate() - i);
+    const dateKey = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(d);
+    const label = d.toLocaleDateString('en-IN', {
+      timeZone: timezone,
+      weekday: 'short',
+    });
+    const dayEarnings = Number(revByDay[dateKey] || 0);
+    weeklyEarnings += dayEarnings;
+
+    weeklyTrends.push({
+      dateKey,
+      label,
+      bookings: Number(bookingsByDay[dateKey] || 0),
+      earnings: dayEarnings,
+    });
+  }
+
+  const totalCompleted = Number(statusMap.completed || 0);
+  const totalCancelled = Number(statusMap.cancelled || 0) + Number(statusMap.no_show || 0);
+  const totalUpcoming = Number(statusMap.confirmed || 0) + Number(statusMap.in_progress || 0);
+  const finishedPool = totalCompleted + totalCancelled;
+  const completionRate = finishedPool > 0
+    ? Math.round((totalCompleted / finishedPool) * 100)
+    : totalUpcoming > 0 ? 100 : 0;
+
+  return res.json({
+    success: true,
+    timezone,
+    kpis: {
+      lifetimeEarnings: Number(payMap.captured || 0),
+      weeklyEarnings,
+      pendingDues: Number(payMap.pending || 0),
+      totalCompleted,
+      totalUpcoming,
+      completionRate,
+      videoCount: Number(modeMap.video || 0),
+      inPersonCount: Number(modeMap.in_person || 0),
+    },
+    weeklyTrends,
+    recentPayments: recentPaymentsRaw.map((p) => ({
+      id: p._id.toString(),
+      patientName: p.patientId?.name || 'Patient',
+      appointmentDate: p.appointmentId?.startAt || p.createdAt,
+      mode: p.appointmentId?.mode || 'video',
+      appointmentStatus: p.appointmentId?.status || 'confirmed',
+      status: p.status,
+      method: p.paymentMethod || p.provider || 'pay_later',
+      transactionId: p.providerPaymentId || p.providerOrderId || p._id.toString(),
+      amount: Number(p.amount || 0),
+      currency: p.currency || 'INR',
+      updatedAt: p.updatedAt || p.createdAt,
+    })),
+  });
+}
+
 module.exports = {
   getAvailableSlots,
   holdSlot,
@@ -861,9 +1199,11 @@ module.exports = {
   getPatientAppointments,
   updatePatientAppointmentNote,
   getPatientPrescription,
+  getPatientPrescriptions,
   cancelPatientAppointment,
   getDoctorAppointments,
   getCompletedDoctorAppointments,
   completeDoctorAppointment,
   savePrescription,
+  getDoctorAnalytics,
 };
