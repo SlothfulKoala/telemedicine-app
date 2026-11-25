@@ -1,111 +1,1555 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
-
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
-
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
+  --cream: #F3EFE6;
+  --cream-soft: rgba(243, 239, 230, 0.86);
+  --cream-muted: rgba(243, 239, 230, 0.52);
+  --ink-dark: #101622;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
-
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
-}
-
-body {
+*, *::before, *::after {
+  box-sizing: border-box;
   margin: 0;
+  padding: 0;
 }
 
-#root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
+html, body, #root {
+  width: 100%;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  background-color: #0d1422;
+  color: var(--cream);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
+  /* Hide scrollbar in Firefox and old Edge */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+/* Hide scrollbar in Chrome, Safari, Brave, and Chromium Edge */
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+*::-webkit-scrollbar {
+  display: none;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* =========================================================================
+   1. ANIMATED FLUTED GLASS WALL (ZERO SLASHED LINE ARTIFACTS)
+   ========================================================================= */
+.fluted-app-shell {
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
-  box-sizing: border-box;
+  overflow-x: clip;
+  background-color: #0e1626;
+  z-index: 1;
 }
 
-h1,
-h2 {
-  font-family: var(--heading);
+.fluted-light-beams {
+  position: fixed;
+  inset: -4%;
+  z-index: -3;
+  pointer-events: none;
+  background-image: 
+    url('/flutter-bg.webp'),
+    url('/fluted-bg.webp'),
+    url('/fluted-bg.png'),
+    radial-gradient(ellipse 80% 70% at 35% 45%, #344969 0%, #142038 55%, #0a101d 100%);
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+  will-change: transform;
+  animation: calmGlassBreathe 26s ease-in-out infinite alternate;
+}
+
+@keyframes calmGlassBreathe {
+  0% { transform: scale(1.02); }
+  100% { transform: scale(1.055); }
+}
+
+/* Soft radial ambient glow instead of a moving 115deg slashed line */
+.fluted-light-caustics {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  mix-blend-mode: soft-light;
+  background: radial-gradient(
+    circle at 38% 46%,
+    rgba(235, 242, 255, 0.22) 0%,
+    rgba(243, 239, 230, 0.08) 38%,
+    transparent 70%
+  );
+  animation: ambientGlowPulse 10s ease-in-out infinite alternate;
+}
+
+@keyframes ambientGlowPulse {
+  0% { opacity: 0.45; }
+  100% { opacity: 0.85; }
+}
+
+.fluted-glass-ribbing {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 92% 85% at 50% 50%,
+    transparent 55%,
+    rgba(8, 13, 24, 0.35) 100%
+  );
+}
+
+/* =========================================================================
+   2. CHROME-SAFE TRUE GLASSMORPHISM (OUTER FRAME + INNER FROSTED CARDS)
+   ========================================================================= */
+.glass-widget-outer {
+  position: relative;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 
+    0 28px 64px rgba(5, 10, 20, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.26);
+  z-index: 1;
+  transition: border-color 0.35s ease, box-shadow 0.35s ease;
+}
+
+.glass-widget-outer:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow: 
+    0 34px 72px rgba(4, 9, 18, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32);
+}
+
+.glass-widget-outer::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 22px;
+  background: linear-gradient(
+    160deg,
+    rgba(42, 56, 82, 0.36) 0%,
+    rgba(28, 40, 62, 0.24) 100%
+  );
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  z-index: -1;
+  pointer-events: none;
+}
+
+.glass-widget-inner {
+  position: relative;
+  background: linear-gradient(
+    145deg,
+    rgba(165, 184, 214, 0.24) 0%,
+    rgba(118, 138, 172, 0.17) 100%
+  );
+  backdrop-filter: blur(32px) saturate(140%);
+  -webkit-backdrop-filter: blur(32px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 16px;
+  box-shadow: 
+    0 8px 24px rgba(8, 14, 26, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  transition: transform 0.35s cubic-bezier(0.19, 1, 0.22, 1), border-color 0.35s ease, background 0.35s ease;
+}
+
+.glass-widget-inner:hover {
+  border-color: rgba(255, 255, 255, 0.32);
+  background: linear-gradient(
+    145deg,
+    rgba(175, 194, 224, 0.27) 0%,
+    rgba(128, 148, 182, 0.2) 100%
+  );
+}
+
+.glass-card {
+  position: relative;
+  background: linear-gradient(
+    145deg,
+    rgba(155, 175, 208, 0.2) 0%,
+    rgba(95, 115, 150, 0.14) 100%
+  );
+  backdrop-filter: blur(30px) saturate(140%);
+  -webkit-backdrop-filter: blur(30px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 22px;
+  box-shadow: 
+    0 24px 50px rgba(5, 10, 20, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+/* =========================================================================
+   3. LIQUID NAVBAR PILL & AUTH BUTTONS
+   ========================================================================= */
+.glass-nav-pill {
+  position: relative;
+  background: rgba(42, 56, 84, 0.38);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 9999px;
+  padding: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  box-shadow: 
+    0 10px 30px rgba(6, 11, 22, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.glass-nav-link {
+  position: relative;
+  padding: 8px 18px;
+  border-radius: 9999px;
+  font-size: 13.5px;
+  font-weight: 400;
+  color: rgba(243, 239, 230, 0.86);
+  text-decoration: none;
+  z-index: 1;
+  transition: color 0.25s ease;
+  user-select: none;
+}
+
+.glass-nav-link:hover,
+.glass-nav-link.active {
+  color: #ffffff;
+}
+
+.glass-nav-link.active {
   font-weight: 500;
-  color: var(--text-h);
 }
 
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
+.nav-active-slider {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.2) 0%,
+    rgba(255, 255, 255, 0.13) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  z-index: -1;
+}
+
+.nav-hover-slider {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.075);
+  z-index: -2;
+}
+
+/* Explicit Navbar Auth Buttons (Log In & Sign Up ↗) */
+.nav-login-btn {
+  padding: 9px 18px;
+  border-radius: 9999px;
+  background: rgba(42, 56, 84, 0.38);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  color: var(--cream);
+  font-size: 13.5px;
+  font-weight: 400;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.25s cubic-bezier(0.19, 1, 0.22, 1), border-color 0.25s ease, background 0.25s ease;
+}
+
+.nav-login-btn:hover {
+  transform: translateY(-1.5px);
+  border-color: rgba(255, 255, 255, 0.42);
+  background: rgba(58, 76, 110, 0.5);
+  color: #ffffff;
+}
+
+.nav-signup-btn {
+  padding: 9px 20px;
+  border-radius: 9999px;
+  background-color: var(--cream);
+  color: var(--ink-dark);
+  font-size: 13.5px;
+  font-weight: 500;
+  text-decoration: none;
+  border: 1px solid var(--cream);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(6, 11, 22, 0.2);
+  transition: transform 0.25s cubic-bezier(0.19, 1, 0.22, 1), background-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.nav-signup-btn:hover {
+  background-color: #ffffff;
+  transform: translateY(-1.5px);
+  box-shadow: 0 10px 24px rgba(6, 11, 22, 0.3);
+}
+
+.circle-icon-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform 0.3s cubic-bezier(0.19, 1, 0.22, 1), box-shadow 0.3s ease;
+}
+
+.circle-icon-btn:hover {
+  transform: translateY(-1.5px) scale(1.04);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
+}
+
+.circle-btn-cream {
+  background-color: var(--cream);
+  color: var(--ink-dark);
+  border: none;
+}
+
+.circle-btn-glass {
+  width: 46px;
+  height: 40px;
+  border-radius: 9999px;
+  background: rgba(42, 56, 84, 0.38);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  color: var(--cream);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.3s cubic-bezier(0.19, 1, 0.22, 1), border-color 0.3s ease, background 0.35s ease;
+}
+
+.circle-btn-glass:hover {
+  transform: translateY(-1.5px);
+  border-color: rgba(255, 255, 255, 0.38);
+  background: rgba(58, 76, 110, 0.48);
+}
+
+/* =========================================================================
+   4. HERO TYPOGRAPHY & ANIMATED BUTTONS
+   ========================================================================= */
+.hero-display-title {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 500;
+  font-size: clamp(3.6rem, 6vw, 5.4rem);
+  line-height: 1.03;
+  letter-spacing: -0.038em;
+  color: var(--cream);
+}
+
+.btn-cream-pill {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--cream);
+  color: var(--ink-dark);
+  font-size: 15px;
+  font-weight: 500;
+  padding: 13px 26px;
+  border-radius: 9999px;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(8, 14, 26, 0.22);
+  transition: 
+    transform 0.38s cubic-bezier(0.19, 1, 0.22, 1),
+    background-color 0.3s ease,
+    box-shadow 0.38s cubic-bezier(0.19, 1, 0.22, 1);
+}
+
+.btn-cream-pill::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -120%;
+  width: 65%;
+  height: 100%;
+  background: linear-gradient(
+    105deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.75) 50%,
+    transparent 100%
+  );
+  transition: left 0.65s cubic-bezier(0.19, 1, 0.22, 1);
+  pointer-events: none;
+}
+
+.btn-cream-pill:hover {
+  background-color: #FAF7F0;
+  transform: translateY(-2.5px) scale(1.015);
+  box-shadow: 
+    0 14px 32px rgba(6, 11, 22, 0.34),
+    0 0 0 4px rgba(243, 239, 230, 0.14);
+}
+
+.btn-cream-pill:hover::before {
+  left: 140%;
+}
+
+.btn-cream-pill:active {
+  transform: translateY(0px) scale(0.98);
+}
+
+.explore-link-animated {
+  position: relative;
+  color: var(--cream);
+  text-decoration: none;
+  font-size: 15.5px;
+  font-weight: 400;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  cursor: pointer;
+  transition: color 0.25s ease;
+}
+
+.explore-link-animated::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 2px;
+  width: 100%;
+  height: 1px;
+  background-color: var(--cream);
+  transform: scaleX(0);
+  transform-origin: right center;
+  transition: transform 0.42s cubic-bezier(0.19, 1, 0.22, 1);
+}
+
+.explore-link-animated:hover {
+  color: #ffffff;
+}
+
+.explore-link-animated:hover::after {
+  transform: scaleX(1);
+  transform-origin: left center;
+}
+
+.arrow-cycle-box {
+  position: relative;
+  width: 15px;
+  height: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.arrow-icon-primary,
+.arrow-icon-clone {
+  position: absolute;
+  font-size: 14.5px;
+  line-height: 1;
+  transition: transform 0.42s cubic-bezier(0.19, 1, 0.22, 1);
+}
+
+.arrow-icon-primary {
+  transform: translate3d(0, 0, 0);
+}
+
+.arrow-icon-clone {
+  transform: translate3d(-130%, 130%, 0);
+}
+
+.btn-cream-pill:hover .arrow-icon-primary,
+.explore-link-animated:hover .arrow-icon-primary {
+  transform: translate3d(130%, -130%, 0);
+}
+
+.btn-cream-pill:hover .arrow-icon-clone,
+.explore-link-animated:hover .arrow-icon-clone {
+  transform: translate3d(0, 0, 0);
+}
+
+/* =========================================================================
+   5. TIME SLOT PILLS (LOCKED COLORS)
+   ========================================================================= */
+.time-slot-btn {
+  position: relative;
+  padding: 7px 15px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: transform 0.25s cubic-bezier(0.19, 1, 0.22, 1), border-color 0.25s ease;
+  z-index: 1;
+}
+
+.time-slot-btn.primary {
+  background-color: var(--cream);
+  color: var(--ink-dark);
+  border: 1px solid var(--cream);
+  cursor: pointer;
+}
+
+.time-slot-btn.primary:hover {
+  transform: translateY(-1.5px);
+}
+
+.time-slot-btn.secondary {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+}
+
+.time-slot-btn.secondary:hover {
+  border-color: rgba(255, 255, 255, 0.42);
+  transform: translateY(-1.5px);
+}
+
+.time-slot-btn.booked {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.48);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: default;
+  pointer-events: none;
+}
+
+/* =========================================================================
+   6. UNIFIED STICKY STORYTELLER VIEWPORT & 3D SCULPTURE STAGE
+   ========================================================================= */
+.story-chapters-track {
+  position: relative;
+  width: 100%;
+  height: 420vh;
+}
+
+/* Wraps BOTH the Storyteller Bar and the 3D Stage so they move together as one unit */
+.story-unified-sticky-viewport {
+  position: sticky;
+  top: 24px;
+  height: calc(100vh - 48px);
+  width: 100%;
+  padding: 0 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  z-index: 30;
+  will-change: transform;
+}
+
+.storyteller-bar-surface {
+  position: relative;
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  border-top: 1px solid rgba(255, 255, 255, 0.22);
+  padding: 18px 0 14px 0;
+  background: transparent;
+  flex-shrink: 0;
+}
+
+.story-chapters-stage {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 16px;
+}
+
+.sculpture-3d-scene {
+  perspective: 1300px;
+  width: 100%;
+  height: 460px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.sculpture-3d-assembly {
+  width: 390px;
+  height: 390px;
+  position: relative;
+  transform-style: preserve-3d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  will-change: transform;
+}
+
+.sculpture-ring-outer {
+  position: absolute;
+  width: 370px;
+  height: 370px;
+  border-radius: 50%;
+  border: 1px solid rgba(243, 239, 230, 0.16);
+  transform: translateZ(-50px) rotateX(64deg) rotateY(-14deg);
+  animation: orbitSpinSlow 24s linear infinite;
+  will-change: transform;
+  pointer-events: none;
+}
+
+.sculpture-ring-inner {
+  position: absolute;
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  border: 1px dashed rgba(255, 255, 255, 0.22);
+  transform: translateZ(-25px) rotateX(56deg) rotateY(18deg);
+  animation: orbitSpinReverse 18s linear infinite;
+  will-change: transform;
+  pointer-events: none;
+}
+
+@keyframes orbitSpinSlow {
+  0% { transform: translateZ(-50px) rotateX(64deg) rotateY(-14deg) rotateZ(0deg); }
+  100% { transform: translateZ(-50px) rotateX(64deg) rotateY(-14deg) rotateZ(360deg); }
+}
+
+@keyframes orbitSpinReverse {
+  0% { transform: translateZ(-25px) rotateX(56deg) rotateY(18deg) rotateZ(360deg); }
+  100% { transform: translateZ(-25px) rotateX(56deg) rotateY(18deg) rotateZ(0deg); }
+}
+
+.sculpture-back-glass {
+  position: absolute;
+  width: 300px;
+  height: 300px;
+  border-radius: 30px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  transform: translateZ(-60px) rotateZ(-5deg);
+  box-shadow: 0 32px 64px rgba(4, 8, 18, 0.42);
+  pointer-events: none;
+}
+
+.sculpture-main-glass {
+  position: relative;
+  width: 345px;
+  border-radius: 24px;
+  background: linear-gradient(145deg, rgba(175, 195, 228, 0.24), rgba(118, 140, 178, 0.16));
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  transform: translateZ(20px);
+  padding: 24px;
+  box-shadow: 
+    0 28px 56px rgba(5, 10, 22, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.34);
+  will-change: transform, opacity;
+}
+
+.sculpture-floating-pill-top {
+  position: absolute;
+  top: 14px;
+  left: -24px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: rgba(34, 48, 74, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  color: var(--cream);
+  font-size: 12.5px;
+  font-weight: 500;
+  transform: translateZ(65px);
+  box-shadow: 0 16px 32px rgba(4, 9, 18, 0.36);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  will-change: transform;
+}
+
+.sculpture-floating-card-bottom {
+  position: absolute;
+  bottom: 12px;
+  right: -22px;
+  padding: 13px 20px;
+  border-radius: 16px;
+  background: var(--cream);
+  color: var(--ink-dark);
+  font-size: 13px;
+  font-weight: 600;
+  transform: translateZ(78px);
+  box-shadow: 0 20px 40px rgba(4, 9, 18, 0.45);
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  will-change: transform;
+}
+
+/* =========================================================================
+   7. VITALISE MATTE GLASS FOOTER
+   ========================================================================= */
+.vitalise-footer {
+  position: relative;
+  width: 100%;
+  margin-top: auto;
+  padding: 72px 48px 40px 48px;
+  overflow: hidden;
+  background: linear-gradient(
+    180deg,
+    rgba(13, 20, 34, 0.55) 0%,
+    rgba(8, 13, 24, 0.88) 100%
+  );
+  backdrop-filter: blur(28px) saturate(135%);
+  -webkit-backdrop-filter: blur(28px) saturate(135%);
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+  z-index: 20;
+}
+
+.vitalise-footer-container {
+  position: relative;
+  z-index: 10;
+  max-width: 1320px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 48px;
+}
+
+.vitalise-footer-top {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 32px;
+}
+
+.vitalise-footer-middle {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 48px;
+}
+
+.vitalise-footer-links-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 64px;
+}
+
+.vitalise-footer-col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.vitalise-footer-col-title {
+  color: var(--cream);
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  margin-bottom: 4px;
+}
+
+.vitalise-footer-link {
+  color: rgba(243, 239, 230, 0.62);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 400;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: color 0.25s ease, transform 0.25s cubic-bezier(0.19, 1, 0.22, 1);
+}
+
+.vitalise-footer-link:hover {
+  color: #ffffff;
+  transform: translateX(4px);
+}
+
+.btn-glass-pill {
+  position: relative;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--cream);
+  font-size: 15px;
+  font-weight: 500;
+  padding: 13px 26px;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: 
+    transform 0.35s cubic-bezier(0.19, 1, 0.22, 1),
+    background 0.25s ease,
+    border-color 0.25s ease;
+}
+
+.btn-glass-pill:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.42);
+  transform: translateY(-2px);
+}
+
+.btn-glass-pill:hover .arrow-icon-primary {
+  transform: translate3d(130%, -130%, 0);
+}
+
+.btn-glass-pill:hover .arrow-icon-clone {
+  transform: translate3d(0, 0, 0);
+}
+
+.vitalise-footer-divider {
+  width: 100%;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.vitalise-footer-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding-top: 4px;
+  color: rgba(243, 239, 230, 0.48);
+  font-size: 13px;
+}
+
+/* =========================================================================
+   8. AUTHENTICATION PORTAL (LOGIN & REGISTER MATTE GLASS UI)
+   ========================================================================= */
+.auth-page-wrapper {
+  flex: 1;
+  width: 100%;
+  max-width: 1380px;
+  margin: 0 auto;
+  padding: 36px 48px 64px 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auth-split-container {
+  position: relative;
+  width: 100%;
+  max-width: 1080px;
+  min-height: 600px;
+  border-radius: 26px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 
+    0 32px 72px rgba(4, 9, 20, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.26);
+  display: grid;
+  grid-template-columns: 1.05fr 1fr;
+  overflow: visible;
+  z-index: 1;
+}
+
+.auth-split-container::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 26px;
+  background: linear-gradient(
+    145deg,
+    rgba(36, 50, 76, 0.42) 0%,
+    rgba(20, 30, 48, 0.32) 100%
+  );
+  backdrop-filter: blur(22px) saturate(135%);
+  -webkit-backdrop-filter: blur(22px) saturate(135%);
+  z-index: -1;
+  pointer-events: none;
+}
+
+.auth-editorial-pane {
+  padding: 52px 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border-right: 1px solid rgba(255, 255, 255, 0.14);
+  border-top-left-radius: 26px;
+  border-bottom-left-radius: 26px;
+  background: linear-gradient(
+    160deg,
+    rgba(255, 255, 255, 0.04) 0%,
+    transparent 100%
+  );
+}
+
+.auth-form-pane {
+  padding: 48px 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border-top-right-radius: 26px;
+  border-bottom-right-radius: 26px;
+  background: linear-gradient(
+    145deg,
+    rgba(165, 184, 214, 0.14) 0%,
+    rgba(118, 138, 172, 0.08) 100%
+  );
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+}
+
+/* Mode & Role Segmented Switchers */
+.auth-segmented-track {
+  position: relative;
+  background: rgba(15, 23, 38, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 9999px;
+  padding: 4px;
+  display: grid;
+  align-items: center;
+}
+
+.auth-segment-btn {
+  position: relative;
+  background: transparent;
+  border: none;
+  padding: 9px 16px;
+  border-radius: 9999px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: rgba(243, 239, 230, 0.75);
+  cursor: pointer;
+  z-index: 1;
+  transition: color 0.2s ease;
+  text-align: center;
+}
+
+.auth-segment-btn.active {
+  color: var(--ink-dark);
+}
+
+.auth-segment-btn.active-frosted {
+  color: #ffffff;
+}
+
+.auth-segment-pill-cream {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: var(--cream);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+  z-index: -1;
+}
+
+.auth-segment-pill-glass {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  z-index: -1;
+}
+
+/* Matte Frosted Input Fields */
+.auth-input-group {
+   position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.auth-input-label {
+  font-size: 12.5px;
+  font-weight: 400;
+  color: rgba(243, 239, 230, 0.78);
+  padding-left: 4px;
+}
+
+.auth-input-field {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 14px;
+  padding: 13px 16px;
+  color: #ffffff;
+  font-size: 14.5px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.22s ease, background 0.22s ease, box-shadow 0.22s ease;
+}
+
+.auth-input-field::placeholder {
+  color: rgba(243, 239, 230, 0.42);
+}
+
+.auth-input-field:focus {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(243, 239, 230, 0.65);
+  box-shadow: 0 0 0 3px rgba(243, 239, 230, 0.1);
+}
+
+.auth-select-field {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%23F3EFE6' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 16px center;
+  padding-right: 40px;
+}
+
+.auth-select-field option {
+  background-color: #141e30;
+  color: #F3EFE6;
+}
+
+@media (max-width: 920px) {
+  .auth-split-container {
+    grid-template-columns: 1fr;
+  }
+  .auth-editorial-pane {
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+    padding: 36px 32px;
+  }
+  .auth-form-pane {
+    padding: 36px 32px;
   }
 }
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
+
+/* =========================================================================
+   9. CUSTOM FROSTED GLASS DROPDOWN MENU (REPLACES NATIVE <SELECT>)
+   ========================================================================= */
+.custom-glass-select-wrapper {
+  position: relative;
+  width: 100%;
+  user-select: none;
 }
-p {
+
+.custom-glass-select-trigger {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 14px;
+  padding: 13px 16px;
+  color: #ffffff;
+  font-size: 14.5px;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: border-color 0.22s ease, background 0.22s ease, box-shadow 0.22s ease;
+}
+
+.custom-glass-select-trigger:hover,
+.custom-glass-select-trigger.is-open {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(243, 239, 230, 0.6);
+}
+
+.custom-glass-select-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 100%;
+  background: linear-gradient(
+    155deg,
+    rgba(30, 43, 68, 0.94) 0%,
+    rgba(18, 27, 45, 0.96) 100%
+  );
+  backdrop-filter: blur(28px) saturate(150%);
+  -webkit-backdrop-filter: blur(28px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  border-radius: 16px;
+  padding: 6px;
+  box-shadow: 
+    0 24px 48px rgba(4, 8, 18, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  z-index: 80;
+  max-height: 230px;
+  overflow-y: auto;
+}
+
+.custom-glass-select-option {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: rgba(243, 239, 230, 0.85);
+  font-size: 14px;
+  font-family: inherit;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.custom-glass-select-option:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.custom-glass-select-option.selected {
+  background: var(--cream);
+  color: var(--ink-dark);
+  font-weight: 500;
+}
+
+/* =========================================================================
+   10. HIDE NATIVE NUMBER SPINNERS & STYLE CUSTOM FEE STEPPERS + DEGREE TAGS
+   ========================================================================= */
+/* Remove ugly white browser up/down arrows on number inputs */
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
   margin: 0;
 }
 
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
+input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }
 
-code {
-  font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
+/* Custom Matte Glass - / + Buttons inside Consultation Fee */
+.fee-stepper-controls {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.fee-step-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: var(--cream);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.15s ease;
+}
+
+.fee-step-btn:hover {
+  background: var(--cream);
+  color: var(--ink-dark);
+  border-color: var(--cream);
+}
+
+.fee-step-btn:active {
+  transform: scale(0.93);
+}
+
+/* Live Comma-Separated Qualification Pills */
+.qualification-tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.qualification-tag-pill {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(243, 239, 230, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+  font-size: 11.5px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* =========================================================================
+   11. SPECIALIST SEARCH DIRECTORY & PROTECTED BOOKING CHECKOUT
+   ========================================================================= */
+.search-page-container {
+  flex: 1;
+  width: 100%;
+  max-width: 1380px;
+  margin: 0 auto;
+  padding: 38px 48px 72px 48px;
+}
+
+/* Top Matte Frosted Filter Bar */
+.search-filter-bar {
+  position: relative;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  padding: 20px 24px;
+  margin-bottom: 32px;
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 0.9fr 0.9fr auto;
+  gap: 14px;
+  align-items: end;
+  z-index: 25;
+  box-shadow: 0 24px 52px rgba(4, 9, 20, 0.28);
+}
+
+.search-filter-bar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 22px;
+  background: linear-gradient(
+    145deg,
+    rgba(38, 52, 78, 0.44) 0%,
+    rgba(22, 33, 52, 0.34) 100%
+  );
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* Doctor Directory Grid */
+.doctor-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: 24px;
+}
+
+.doctor-directory-card {
+  position: relative;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  padding: 26px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 20px;
+  background: linear-gradient(
+    145deg,
+    rgba(165, 184, 214, 0.2) 0%,
+    rgba(110, 130, 165, 0.13) 100%
+  );
+  backdrop-filter: blur(28px) saturate(140%);
+  -webkit-backdrop-filter: blur(28px) saturate(140%);
+  box-shadow: 
+    0 18px 42px rgba(5, 10, 22, 0.26),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  transition: transform 0.32s cubic-bezier(0.19, 1, 0.22, 1), border-color 0.32s ease;
+}
+
+.doctor-directory-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+/* Checkout Split Layout */
+.checkout-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 0.85fr;
+  gap: 32px;
+  align-items: start;
+}
+
+.hold-timer-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgba(132, 181, 159, 0.16);
+  border: 1px solid rgba(132, 181, 159, 0.38);
+  color: #d8f3e5;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+@media (max-width: 1024px) {
+  .search-filter-bar {
+    grid-template-columns: 1fr 1fr;
+  }
+  .checkout-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* =========================================================================
+   12. PATIENT DASHBOARD, DOCTOR CONSOLE & SCHEDULE BUILDER
+   ========================================================================= */
+.dashboard-page-container {
+  flex: 1;
+  width: 100%;
+  max-width: 1380px;
+  margin: 0 auto;
+  padding: 38px 48px 72px 48px;
+}
+
+.dashboard-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
+  margin-bottom: 32px;
+}
+
+.dashboard-stat-card {
+  padding: 22px 24px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: linear-gradient(
+    145deg,
+    rgba(165, 184, 214, 0.18) 0%,
+    rgba(110, 130, 165, 0.11) 100%
+  );
+  backdrop-filter: blur(26px);
+  -webkit-backdrop-filter: blur(26px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.appointment-row-card {
+  padding: 22px 26px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: linear-gradient(
+    145deg,
+    rgba(165, 184, 214, 0.2) 0%,
+    rgba(110, 130, 165, 0.12) 100%
+  );
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  transition: border-color 0.25s ease, transform 0.25s cubic-bezier(0.19, 1, 0.22, 1);
+}
+
+.appointment-row-card:hover {
+  border-color: rgba(255, 255, 255, 0.34);
+  transform: translateY(-2px);
+}
+
+/* Schedule Builder Day Row */
+.schedule-day-row {
+  padding: 16px 20px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+  display: grid;
+  grid-template-columns: 160px 1fr auto;
+  align-items: center;
+  gap: 18px;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.schedule-day-row.active-day {
+  background: rgba(255, 255, 255, 0.11);
+  border-color: rgba(255, 255, 255, 0.26);
+}
+
+@media (max-width: 900px) {
+  .schedule-day-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* =========================================================================
+   13. SCHEDULE BUILDER POLISH (GLASS TOGGLES, TIMELINE GRID & MORPHING CTA)
+   ========================================================================= */
+/* Custom Frosted Glass Toggle Switch (Replaces harsh native checkboxes) */
+.glass-toggle-switch {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  cursor: pointer;
+  padding: 2px;
+  display: inline-flex;
+  align-items: center;
+  transition: background 0.22s ease, border-color 0.22s ease;
+  flex-shrink: 0;
+}
+
+.glass-toggle-switch.is-on {
+  background: var(--cream);
+  border-color: var(--cream);
+}
+
+.glass-toggle-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(243, 239, 230, 0.85);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), background 0.22s ease;
+}
+
+.glass-toggle-switch.is-on .glass-toggle-thumb {
+  transform: translateX(18px);
+  background: var(--ink-dark);
+}
+
+/* Aligned Day Row Bar */
+.schedule-day-card {
+  position: relative;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  transition: background 0.22s ease, border-color 0.22s ease, opacity 0.22s ease;
+}
+
+.schedule-day-card.is-enabled {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.schedule-day-header {
+  padding: 15px 20px;
+  display: grid;
+  grid-template-columns: 155px 1fr auto;
+  align-items: center;
+  gap: 16px;
+}
+
+/* Uniform Timeline Slot Card Grid (No dangling right-edge pills) */
+.timeline-slots-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(215px, 1fr));
+  gap: 12px;
+}
+
+.timeline-slot-card {
+  border-radius: 14px;
+  border: 1px solid rgba(243, 239, 230, 0.3);
+  background: linear-gradient(
+    145deg,
+    rgba(243, 239, 230, 0.12) 0%,
+    rgba(255, 255, 255, 0.05) 100%
+  );
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: border-color 0.2s ease, background 0.2s ease, opacity 0.2s ease;
+}
+
+.timeline-slot-card.is-break {
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(15, 23, 38, 0.35);
+  opacity: 0.72;
+}
+
+.timeline-rest-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  padding-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11.5px;
+  color: var(--cream-soft);
+}
+
+.timeline-rest-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.timeline-rest-stepper.has-rest {
+  background: rgba(132, 181, 159, 0.18);
+  border-color: rgba(132, 181, 159, 0.42);
+  color: #d8f3e5;
+}
+
+/* Publish Button Feedback Variants */
+.btn-publish-success {
+  background: linear-gradient(135deg, #a7d7c0 0%, #84b59f 100%) !important;
+  color: #0e1a14 !important;
+  box-shadow: 0 10px 26px rgba(132, 181, 159, 0.32) !important;
+}
+
+.btn-publish-error {
+  background: linear-gradient(135deg, #e58e8e 0%, #c96262 100%) !important;
+  color: #1f0a0a !important;
+  box-shadow: 0 10px 26px rgba(217, 107, 107, 0.32) !important;
+}
+
+@media (max-width: 1080px) {
+  .schedule-day-header {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+/* =========================================================================
+   14. LOCKED TIMELINE CONTROLS & MATTE FROSTED HOVER TOOLTIPS
+   ========================================================================= */
+.glass-lock-tooltip-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.is-locked-control {
+  opacity: 0.62;
+  cursor: not-allowed !important;
+  border-style: dashed !important;
+}
+
+.glass-lock-tooltip {
+  position: absolute;
+  bottom: calc(100% + 9px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  width: max-content;
+  max-width: 230px;
+  padding: 8px 12px;
+  border-radius: 11px;
+  background: linear-gradient(
+    155deg,
+    rgba(24, 35, 56, 0.96) 0%,
+    rgba(14, 21, 36, 0.98) 100%
+  );
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  box-shadow: 0 14px 32px rgba(4, 8, 18, 0.55);
+  color: var(--cream);
+  font-size: 11.5px;
+  line-height: 1.4;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s ease;
+  z-index: 120;
+}
+
+.glass-lock-tooltip-wrapper:hover .glass-lock-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+.day-subcontrols-bar {
+  padding: 12px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
 }
