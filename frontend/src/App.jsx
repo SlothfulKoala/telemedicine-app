@@ -15,6 +15,8 @@ import HealthVault from './pages/patient/HealthVault';
 import DoctorDashboard from './pages/doctor/DoctorDashboard';
 import ScheduleBuilder from './pages/doctor/ScheduleBuilder';
 import DoctorAnalytics from './pages/doctor/DoctorAnalytics';
+import ProtectedRoute from './components/ProtectedRoute';
+import VideoRoom from './pages/video/VideoRoom';
 
 const AnimatedPreviewPage = ({ title, subtitle, primaryActionText, primaryActionLink }) => (
   <motion.main
@@ -72,12 +74,22 @@ const AnimatedRoutes = () => {
         <Route path="/patient/checkout/:doctorId" element={<BookingCheckout />} />
         <Route path="/patient/dashboard" element={<PatientDashboard />} />
         <Route path="/patient/appointments" element={<PatientDashboard />} />
-        <Route path="/vault" element={<HealthVault/>} />
+        <Route path="/vault" element={<HealthVault />} />
 
         {/* Doctor Routes */}
         <Route path="/doctor/dashboard" element={<DoctorDashboard />} />
         <Route path="/doctor/schedule" element={<ScheduleBuilder />} />
         <Route path="/doctor/analytics" element={<DoctorAnalytics />} />
+
+        {/* Authenticated Scheduled Video Consultation Room */}
+        <Route
+          path="/video/:appointmentId"
+          element={
+            <ProtectedRoute allowedRoles={['patient', 'doctor']}>
+              <VideoRoom />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Video Room Preview */}
         <Route

@@ -3,10 +3,14 @@ const jwt = require('jsonwebtoken');
 const AUTH_COOKIE_NAME = 'accessToken';
 
 function getAuthCookieOptions() {
+  const isCrossSiteHttps =
+    process.env.NODE_ENV === 'production' ||
+    (process.env.FRONTEND_ORIGIN || '').startsWith('https://');
+
   return {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    secure: isCrossSiteHttps,
+    sameSite: isCrossSiteHttps ? 'none' : 'lax',
     path: '/',
   };
 }

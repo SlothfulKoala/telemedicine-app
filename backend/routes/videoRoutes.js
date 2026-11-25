@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
+const { authenticate } = require('../middleware/authMiddleware');
+const { issueConsultToken } = require('../controllers/videoController');
 
-// Placeholder route
-router.get('/', (req, res) => {
-  res.json({ message: 'Video route working' });
-});
+const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+router.post('/consults/:appointmentId/token', authenticate, asyncHandler(issueConsultToken));
 
 module.exports = router;

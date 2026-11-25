@@ -1,8 +1,33 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 
+// const resolveApiBaseUrl = () => {
+//   const savedBackend = localStorage.getItem('TELEMED_BACKEND_URL');
+//   if (savedBackend) return `${savedBackend.replace(/\/+$/, '')}/api`;
+
+//   const envBackend = import.meta.env.VITE_BACKEND_URL;
+//   if (envBackend) return `${envBackend.replace(/\/+$/, '')}/api`;
+
+//   return '/api';
+// };
+
+// export const api = axios.create({
+//   baseURL: resolveApiBaseUrl(),
+//   withCredentials: true,
+// });
+
+const resolveApiBaseUrl = () => {
+  const savedBackend = localStorage.getItem('TELEMED_BACKEND_URL');
+  if (savedBackend) return `${savedBackend.replace(/\/+$/, '')}/api`;
+
+  const envBackend = import.meta.env.VITE_BACKEND_URL;
+  if (envBackend) return `${envBackend.replace(/\/+$/, '')}/api`;
+
+  return '/api';
+};
+
 export const api = axios.create({
-  baseURL: 'http://localhost:5000/api',
+  baseURL: resolveApiBaseUrl(),
   withCredentials: true,
 });
 

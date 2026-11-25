@@ -5,13 +5,22 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   server: {
-    // Allows external tunnel domains (like trycloudflare.com) to access the Vite dev server
+    host: true,
     allowedHosts: [
-      '.trycloudflare.com',  // Allows any subdomain of trycloudflare.com
+      '.trycloudflare.com',
       'localhost',
-      '127.0.0.1'
+      '127.0.0.1',
     ],
-    // Alternatively, you can use 'all' if you prefer:
-    // allowedHosts: 'all'
-  }
+    proxy: {
+      '/api': {
+        target: 'http://localhost:5000',
+        changeOrigin: true,
+      },
+      '/socket.io': {
+        target: 'http://localhost:5000',
+        ws: true,
+        changeOrigin: true,
+      },
+    },
+  },
 });
