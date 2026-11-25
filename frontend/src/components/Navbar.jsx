@@ -26,8 +26,8 @@ const Navbar = () => {
   const navConfig = {
     guest: [
       { label: 'Overview', path: '/' },
-      { label: 'Specialties', path: '/', chapterIndex: 0 },
-      { label: 'Security & Privacy', path: '/', chapterIndex: 3 },
+      { label: 'Specialties', path: '/speciality' },
+      { label: 'Security & Privacy', path: '/security' },
     ],
     patient: [
       { label: 'My Appointments', path: '/patient/dashboard' },
@@ -46,24 +46,6 @@ const Navbar = () => {
   };
 
   const links = navConfig[role] || navConfig.guest;
-
-  const handleNavClick = (e, item) => {
-    if (typeof item.chapterIndex === 'number') {
-      e.preventDefault();
-      if (location.pathname !== '/') {
-        navigate('/');
-        setTimeout(() => {
-          window.dispatchEvent(
-            new CustomEvent('vitalise:scroll-chapter', { detail: item.chapterIndex })
-          );
-        }, 120);
-      } else {
-        window.dispatchEvent(
-          new CustomEvent('vitalise:scroll-chapter', { detail: item.chapterIndex })
-        );
-      }
-    }
-  };
 
   const handleLogout = async () => {
     await logout();
@@ -129,18 +111,15 @@ const Navbar = () => {
         onMouseLeave={() => setHoveredTab(null)}
       >
         {links.map((item) => {
-          const isChapterLink = typeof item.chapterIndex === 'number';
           const isActive =
-            !isChapterLink &&
-            (location.pathname === item.path ||
-              (item.path === '/search' && location.pathname.startsWith('/patient/checkout')));
+            location.pathname === item.path ||
+            (item.path === '/search' && location.pathname.startsWith('/patient/checkout'));
           const isHovered = hoveredTab === item.label;
 
           return (
             <Link
               key={item.label}
               to={item.path}
-              onClick={(e) => handleNavClick(e, item)}
               onMouseEnter={() => setHoveredTab(item.label)}
               className={`glass-nav-link ${isActive ? 'active' : ''}`}
             >
