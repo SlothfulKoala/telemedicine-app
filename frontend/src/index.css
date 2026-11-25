@@ -1553,3 +1553,340 @@ input[type='number'] {
   justify-content: space-between;
   gap: 14px;
 }
+
+/* =========================================================================
+   15. TELEMEDICINE VIDEO CONSULTATION STAGE, PIP & ERROR STATES
+   ========================================================================= */
+.video-consult-shell {
+  flex: 1;
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 20px 48px 28px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: calc(100vh - 76px);
+}
+
+.video-consult-topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 20px;
+  border-radius: 18px;
+  background: linear-gradient(
+    145deg,
+    rgba(38, 52, 78, 0.46) 0%,
+    rgba(22, 33, 52, 0.34) 100%
+  );
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.video-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 500;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--cream);
+}
+
+.video-status-pill.is-connected {
+  background: rgba(132, 181, 159, 0.18);
+  border-color: rgba(132, 181, 159, 0.42);
+  color: #d8f3e5;
+}
+
+.video-status-pill.is-error {
+  background: rgba(217, 107, 107, 0.18);
+  border-color: rgba(217, 107, 107, 0.42);
+  color: #ffd6d6;
+}
+
+.video-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--cream);
+}
+
+.video-status-pill.is-connected .video-status-dot {
+  background-color: #84b59f;
+  box-shadow: 0 0 10px rgba(132, 181, 159, 0.8);
+}
+
+.video-status-pill.is-waiting .video-status-dot {
+  background-color: #f3d28f;
+  animation: videoPulseDot 1.8s ease-in-out infinite;
+}
+
+.video-status-pill.is-error .video-status-dot {
+  background-color: #e58e8e;
+}
+
+@keyframes videoPulseDot {
+  0%, 100% { opacity: 0.45; transform: scale(0.92); }
+  50% { opacity: 1; transform: scale(1.18); }
+}
+
+/* Main Stage (Maximized Remote Participant) */
+.video-stage-viewport {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  min-height: 520px;
+  border-radius: 26px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: radial-gradient(
+    ellipse at 50% 42%,
+    rgba(30, 44, 70, 0.78) 0%,
+    rgba(10, 16, 28, 0.94) 100%
+  );
+  box-shadow:
+    0 32px 72px rgba(4, 9, 20, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+.video-remote-feed {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #090e18;
+  transition: opacity 0.35s ease;
+}
+
+.video-waiting-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 32px;
+  z-index: 5;
+}
+
+.video-waiting-avatar {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: linear-gradient(
+    145deg,
+    rgba(243, 239, 230, 0.18) 0%,
+    rgba(255, 255, 255, 0.06) 100%
+  );
+  border: 1px solid rgba(243, 239, 230, 0.32);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--cream);
+  margin-bottom: 20px;
+  box-shadow: 0 0 0 12px rgba(243, 239, 230, 0.04);
+}
+
+.video-peer-badge {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  z-index: 15;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(12, 19, 33, 0.62);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Minimized Self-View (Picture-in-Picture) */
+.video-pip-card {
+  position: absolute;
+  bottom: 22px;
+  right: 22px;
+  width: 240px;
+  aspect-ratio: 16 / 10;
+  border-radius: 18px;
+  overflow: hidden;
+  z-index: 20;
+  background: #0d1422;
+  border: 1.5px solid rgba(243, 239, 230, 0.35);
+  box-shadow:
+    0 20px 44px rgba(4, 8, 18, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition: transform 0.28s cubic-bezier(0.19, 1, 0.22, 1), border-color 0.25s ease;
+}
+
+.video-pip-card:hover {
+  transform: translateY(-3px) scale(1.02);
+  border-color: var(--cream);
+}
+
+.video-local-feed {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+  display: block;
+}
+
+.video-pip-muted-cover {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    145deg,
+    rgba(28, 39, 60, 0.94) 0%,
+    rgba(14, 21, 36, 0.98) 100%
+  );
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--cream-soft);
+  font-size: 12px;
+}
+
+.video-pip-label {
+  position: absolute;
+  bottom: 8px;
+  left: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.video-pip-tag {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(10, 16, 28, 0.68);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: var(--cream);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* Floating Glass Control Dock */
+.video-controls-dock {
+  position: absolute;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 25;
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: rgba(18, 27, 45, 0.72);
+  backdrop-filter: blur(26px) saturate(145%);
+  -webkit-backdrop-filter: blur(26px) saturate(145%);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  box-shadow: 0 20px 48px rgba(4, 8, 18, 0.5);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.video-dock-btn {
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--cream);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+}
+
+.video-dock-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.38);
+  transform: translateY(-1px);
+}
+
+.video-dock-btn.is-toggled-off {
+  background: rgba(217, 107, 107, 0.24);
+  border-color: rgba(217, 107, 107, 0.52);
+  color: #ffd6d6;
+}
+
+.video-dock-btn.is-end-call {
+  background: linear-gradient(135deg, #e07676 0%, #c65353 100%);
+  border-color: rgba(255, 214, 214, 0.4);
+  color: #ffffff;
+}
+
+.video-dock-btn.is-end-call:hover {
+  background: linear-gradient(135deg, #e98585 0%, #d15e5e 100%);
+  box-shadow: 0 10px 24px rgba(198, 83, 83, 0.38);
+}
+
+/* Glassmorphic Error Alert Banner & Auth Error Card */
+.video-error-banner {
+  padding: 14px 18px;
+  border-radius: 16px;
+  background: linear-gradient(
+    145deg,
+    rgba(185, 74, 74, 0.24) 0%,
+    rgba(110, 38, 38, 0.18) 100%
+  );
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(235, 130, 130, 0.42);
+  box-shadow: 0 14px 32px rgba(4, 8, 18, 0.28);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 820px) {
+  .video-consult-shell {
+    padding: 16px 20px 24px 20px;
+  }
+  .video-stage-viewport {
+    min-height: 460px;
+  }
+  .video-pip-card {
+    width: 148px;
+    bottom: 84px;
+    right: 14px;
+  }
+  .video-controls-dock {
+    bottom: 14px;
+    padding: 6px 8px;
+    gap: 6px;
+  }
+  .video-dock-btn span {
+    display: none;
+  }
+  .video-dock-btn {
+    padding: 0 14px;
+  }
+}

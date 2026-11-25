@@ -108,6 +108,26 @@ const AnimatedRoutes = () => {
   );
 };
 
+const AppContent = ({ bgX, bgY }) => {
+  const location = useLocation();
+  const isActiveVideoCall = /^\/video\/[^/]+$/.test(location.pathname);
+
+  return (
+    <div className="fluted-app-shell">
+      <motion.div
+        style={{ x: bgX, y: bgY }}
+        className="fluted-light-beams"
+      />
+      <div className="fluted-light-caustics" />
+      <div className="fluted-glass-ribbing" />
+
+      <Navbar />
+      <AnimatedRoutes />
+      {!isActiveVideoCall && <Footer />}
+    </div>
+  );
+};
+
 function App() {
   const rawX = useMotionValue(0);
   const rawY = useMotionValue(0);
@@ -128,18 +148,7 @@ function App() {
   return (
     <AuthProvider>
       <Router>
-        <div className="fluted-app-shell">
-          <motion.div
-            style={{ x: bgX, y: bgY }}
-            className="fluted-light-beams"
-          />
-          <div className="fluted-light-caustics" />
-          <div className="fluted-glass-ribbing" />
-
-          <Navbar />
-          <AnimatedRoutes />
-          <Footer />
-        </div>
+        <AppContent bgX={bgX} bgY={bgY} />
       </Router>
     </AuthProvider>
   );
